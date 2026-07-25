@@ -49,3 +49,8 @@ node_modules/
 
 # Compound Engineering local config
 .compound-engineering/*.local.yaml
+
+# Private AI and workshop notes
+docs/local/
+docs/planning/*.local.md
+AI_USAGE.local.md

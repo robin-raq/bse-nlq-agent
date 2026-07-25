@@ -125,3 +125,47 @@ Record:
 - Deferred or blocked work
 
 Do not commit secrets, `.env` files, or the private candidate exercise PDF.
+
+## Public and Private AI Records
+
+Committed AI documentation must be curated for reviewers. Do not place raw chat
+transcripts, complete prompt histories, private scratch notes, or routine agent
+interactions in tracked files.
+
+Use the records as follows:
+
+- `AI_USAGE.md`: public summary of material AI assistance
+- `AI_USAGE.local.md`: private detailed AI work log
+- `docs/planning/architecture-workshop.md`: public summary of design options,
+  tradeoffs, approved decisions, and unresolved risks
+- `docs/planning/architecture-workshop.local.md`: private workshop notes and
+  prompt fragments
+
+A material AI interaction is one that meaningfully affects:
+
+- Architecture
+- Technology selection
+- Scope
+- Security or safety controls
+- Implementation behavior
+- Testing or evaluation strategy
+- A substantive defect or correction
+- A submitted project artifact
+
+Routine commands, spelling changes, repeated prompts, exploratory dead ends,
+and minor wording assistance do not need individual disclosure.
+
+When an important prompt influenced the submitted work, summarize its purpose
+and effect. Do not publish the entire prompt unless the exact wording is itself
+necessary to understand or reproduce the decision.
+
+Before completing a phase:
+
+1. Update the private work log as useful during development.
+2. Promote only material and reviewer-relevant information to `AI_USAGE.md`.
+3. Confirm committed planning files contain summaries rather than transcripts.
+4. Review all tracked documentation for secrets, private material, or excessive
+   internal process detail.
+
+The `AI_USAGE.md` completion gate requires an accurate curated disclosure. It
+does not require a complete history of every AI interaction.

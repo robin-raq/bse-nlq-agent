@@ -1,7 +1,13 @@
-# AI Usage Log
+# AI Usage Disclosure
 
-This document records AI tools used during the candidate exercise, along with
-important prompts, decisions, validation, manual review, and limitations.
+This document provides a curated, reviewer-facing disclosure of material AI
+assistance used during the candidate exercise. It is not a raw prompt history
+or chat transcript.
+
+Detailed prompts, scratch notes, and routine interactions may be recorded in
+the ignored `AI_USAGE.local.md` file. Only assistance that materially affects
+architecture, implementation, testing, evaluation, safety, or submitted
+artifacts should be summarized here.
 
 ## 2026-07-25 — Repository initialization
 

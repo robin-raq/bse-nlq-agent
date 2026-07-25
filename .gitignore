@@ -1,0 +1,48 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Keep seeded project databases only when explicitly force-added
+
+# Private candidate exercise materials
+docs/exercise/*.pdf
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# JavaScript dependencies and output
+node_modules/
+.npm/
+.turbo/

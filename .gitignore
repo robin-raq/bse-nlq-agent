@@ -46,3 +46,6 @@ docs/exercise/*.pdf
 node_modules/
 .npm/
 .turbo/
+
+# Compound Engineering local config
+.compound-engineering/*.local.yaml

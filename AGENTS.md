@@ -126,6 +126,14 @@ Record:
 
 Do not commit secrets, `.env` files, or the private candidate exercise PDF.
 
+## Progress Tracking
+
+- `PROJECT_STATUS.md` is the concise current-state summary.
+- The active Compound Engineering plan is the source of truth for remaining work.
+- Git commits and validation output are the source of truth for completed work.
+- Do not maintain duplicate detailed task lists.
+- Update `PROJECT_STATUS.md` at phase boundaries, not after every minor edit.
+
 ## Public and Private AI Records
 
 Committed AI documentation must be curated for reviewers. Do not place raw chat

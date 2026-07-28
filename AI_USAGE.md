@@ -219,3 +219,72 @@ This change is **prepared but uncommitted**, pending review.
 No application feature code was written. No credentials were used, no model was
 called, no application database was created, and no evaluation was run. The only
 network activity was dependency resolution through `uv`.
+
+## 2026-07-28 — SQLite prerequisite verification
+
+### Tools and environment
+
+- Claude Code (Claude Opus) used to guide the verification and interpret results
+- `uv`-managed Python **3.13.14**
+- SQLite library **3.53.1**
+- Temporary scratchpad probes only, run outside the repository
+- **No tracked probe utility was created**, and none was needed
+
+### Behavioral probes
+
+Isolated capability probes against in-memory databases and a temporary
+directory. These verify the runtime, **not** the application's SQL safety
+boundary, which is neither implemented nor tested.
+
+| Category | Outcome |
+|---|---|
+| STRICT type enforcement | Invalid value into an INTEGER column rejected — `IntegrityError` |
+| Foreign-key enablement | Initially disabled; `PRAGMA foreign_keys = ON` succeeded before any transaction and read back as enabled |
+| Foreign-key enforcement | Orphan reference rejected — `IntegrityError` |
+| Read-only URI | `SELECT` permitted; `INSERT` rejected — `OperationalError` |
+| `query_only` | `SELECT` permitted; `INSERT` rejected — `OperationalError` |
+| Authorizer availability | `Connection.set_authorizer` present |
+| Authorizer denial | Narrow `SELECT` permitted; `INSERT`, `PRAGMA`, and `DROP` denied — `DatabaseError` |
+| Progress-handler interruption | Small query completed; expensive recursive query interrupted — `OperationalError: interrupted` |
+| Cleanup | Temporary databases and directory removed; absence verified |
+
+The STRICT result means the approved ordinary-table-plus-`CHECK` fallback is not
+needed for the currently pinned environment. It **remains an approved
+portability contingency**.
+
+### Manual review and corrections
+
+- **Authorizer constant-name collision noticed and corrected.** An automated
+  reverse lookup over `sqlite3` module constants reported action code `19` as
+  `SQLITE_CONSTRAINT`. In an authorizer callback it is **`SQLITE_PRAGMA`**;
+  both share the value 19 across different namespaces. The report was corrected
+  rather than published with the wrong name, and the finding was recorded so
+  future code uses an explicit authorizer-action mapping.
+- **Denial timing described only from observed behavior.** Denial was observed
+  when a statement was submitted. No direct instrumentation of
+  `sqlite3_prepare_v2` was performed, and none is claimed.
+- **The writable setup connection was closed before `mode=ro` was tested**, so
+  the read-only result could not be weakened by reusing a writable handle.
+- **`query_only` was tested independently** on an otherwise writable connection,
+  so it is not conflated with the read-only URI.
+- **Temporary files were removed and their absence verified.**
+
+### Provider disposition
+
+- Credential checks were **presence-only**; no value was printed, logged, or
+  persisted.
+- Neither `OPENAI_API_KEY` nor `GROQ_API_KEY` was available to the verification
+  environment.
+- A local `.env` file exists on disk. It is gitignored and untracked, and its
+  contents were **not read**.
+- **No network request or provider call occurred.**
+- These results are **blocked, not failed**. Nothing has been observed about
+  either endpoint's behavior, and neither has been judged ineligible.
+- Shared-adapter compatibility remains **unverified**.
+
+### Explicitly not completed
+
+Application schema · deterministic seed script · semantic metadata · application
+database · connection factory · final authorizer policy · SQLGlot validator
+(not exercised in any phase so far) · fetch cap · production progress budget ·
+provider smoke tests · model adapter · model-quality evaluation.

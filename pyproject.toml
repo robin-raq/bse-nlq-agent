@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bse-nlq"
+version = "0.1.0"
+description = "Natural language query agent translating plain-English questions into validated, read-only SQL."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "openai",
+    "sqlglot",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bse_nlq"]
+
+[tool.ruff]
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Deliberately small and defensible: standard errors, likely bugs,
+# import ordering, and modern-Python upgrades. Complexity and line-count
+# gates are not configured yet.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "B",   # flake8-bugbear: likely bugs
+    "I",   # isort: import ordering
+    "UP",  # pyupgrade: modern Python for the pinned target
+]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src/bse_nlq"]
+strict = true
+# No per-module overrides: the modules they would describe do not exist yet.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+# Invariant: the automated suite runs fully offline. No test may contact a
+# live model endpoint, require an API key, or make a network request.
+# Live provider smoke tests and model evaluation are separate explicit
+# commands and are never discovered by pytest.
+
+[tool.coverage.run]
+source = ["src/bse_nlq"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+# Diagnostic only. No fail_under threshold is set.

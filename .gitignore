@@ -26,12 +26,10 @@ dist/
 .idea/
 .DS_Store
 
-# Local databases
+# Local databases (generated from the deterministic seed script, never committed)
 *.db
 *.sqlite
 *.sqlite3
-
-# Keep seeded project databases only when explicitly force-added
 
 # Private candidate exercise materials
 docs/exercise/*.pdf

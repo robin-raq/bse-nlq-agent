@@ -1,10 +1,6 @@
-# System Context Diagram
+# System Context
 
-Status: Approved target design. Implementation pending; diagrams describe
-intended structure, not verified structure.
-
-External actors, the application boundary, and the systems the agent will depend
-on.
+> Approved target design; implementation is pending.
 
 ```mermaid
 flowchart TB
@@ -42,28 +38,12 @@ flowchart TB
     class cli,service,core,db,harness owned
 ```
 
-## Trust boundary
-
 | Source | Trust |
 |---|---|
-| User question | Untrusted — inserted as delimited data, never as instructions |
-| Model response | Untrusted — the provider schema enforces shape, not truth |
-| Introspected schema | Trusted — read from the initialized database |
-| Semantic metadata | Trusted — curated and version-controlled |
+| User question | Untrusted, delimited data |
+| Model response | Untrusted; schema enforcement covers shape only |
+| Introspected database schema | Trusted structural source |
+| Version-controlled semantic metadata | Trusted business source |
 | Application code | Trusted |
 
-The model provider sits outside the boundary in both directions. The application
-sends it one semantic generation attempt per request, and treats everything
-returned as input requiring validation.
-
-## Dependency notes
-
-- The database will be generated locally from a deterministic seed script
-  committed with the implementation. The database itself is never downloaded and
-  never committed.
-- The provider endpoint is the only network dependency, and the approved test
-  plan requires that no automated test contact it.
-- Logs go to stderr so the machine-readable result on stdout stays
-  uncontaminated.
-- Evaluation reports will be committed artifacts, written by the harness and read
-  by reviewers. None exist yet.
+The model provider is the only network dependency. The database is generated locally, tests never contact a provider, logs use stderr, and evaluation artifacts are committed only after they exist.

@@ -1,8 +1,8 @@
 # Project Status
 
 Last updated: 2026-07-28
-Current phase: SQLite prerequisites verified; provider verification blocked;
-schema and seed design next.
+Current phase: SQLite and provider prerequisites verified; physical schema and
+deterministic seed design next.
 
 This is the repository's concise implementation handoff and persistent context
 document for coding agents. It is **not architecture authority** — approved
@@ -14,7 +14,8 @@ decisions live in `docs/planning/decisions.md` and always take precedence.
 - Agent handoff contract committed at `51df1a6`.
 - Pre-implementation contracts frozen at `e8051f5`.
 - Python package and toolchain established at `e58caf1`.
-- SQLite behavioral prerequisites verified in the pinned environment
+- SQLite behavioral prerequisites verified in the pinned environment.
+- Provider endpoint prerequisites verified; both endpoints eligible
   (this phase).
 - No push has occurred; the repository has no remote configured.
 
@@ -87,53 +88,59 @@ The approved ordinary-table-plus-`CHECK` fallback is **not needed for the
 currently pinned environment**, because STRICT behavior passed. It **remains an
 approved portability contingency** and is not withdrawn from the architecture.
 
-## Provider verification — blocked
+## Provider endpoint prerequisites verified
 
-- `OPENAI_API_KEY`: **not available to the verification environment**
-- `GROQ_API_KEY`: **not available to the verification environment**
-- A local `.env` file exists on disk. It is gitignored and untracked, and its
-  contents were **not read**. No variables from it were loaded into the
-  verification shell.
-- **No provider request was attempted.** No network call of any kind was made.
+Endpoint eligibility only. One request per provider, using a harmless prompt
+unrelated to the BSE dataset. **No BSE SQL was generated or executed.**
 
-Consequently unverified: model access, structured-output enforcement, exact
-endpoint identifiers, billing, retry behavior, usage metadata, and
-shared-adapter compatibility.
+**OpenAI — eligible for MVP endpoint integration.** Responses API, default base
+URL. Requested alias `gpt-5-mini`; the API returned identifier
+`gpt-5-mini-2025-08-07`. The strict flattened `ModelDecision` schema was
+accepted, completion status was `completed`, exactly the four required fields
+were returned, an explicitly requested undeclared field was absent, and local
+invariants passed. No refusal occurred. Observed latency 9,117 ms; usage 155
+input / 336 output / 491 total tokens.
 
-**This is not evidence of provider failure or ineligibility.** Nothing has been
-observed about either endpoint's behavior.
+**Groq — eligible for like-for-like comparison.** Chat Completions through
+`https://api.groq.com/openai/v1`, model `openai/gpt-oss-120b`. The same strict
+flattened schema was accepted with `strict: true`, finish reason was `stop`,
+exactly the four required fields were returned, the requested undeclared field
+was absent, and local invariants passed. Observed latency 1,088 ms; usage 289
+prompt / 343 completion / 632 total tokens.
+
+Both latency figures are **single observational samples from one request each**.
+They are not comparative evidence and imply nothing about p95 behavior.
+
+**Both endpoints are eligible.** No provider prerequisite blocker remains for the
+MVP. The two-candidate comparison is available for later D-010 evaluation.
+
+**Not established by these probes:** NLQ-to-SQL quality, SQL correctness, model
+reliability, production readiness, comparative latency, comparative cost, p95
+latency, constrained decoding as Groq's internal mechanism, final model
+selection, retry reliability, and refusal behavior across representative cases.
+
+**No production adapter exists.** No application model call has been implemented.
 
 ## Active blockers
 
-**The model-backed MVP is blocked by:**
+None for the prerequisite phase. Model quality and final model selection remain
+unverified and are gated behind the frozen D-010 evaluation, which has not run.
 
-- OpenAI credential not available to the verification environment
-- unverified OpenAI billing and access
-- unverified exact GPT-5 mini endpoint identifier
-- unverified strict structured-output behavior
-
-**The optional model comparison is blocked by:**
-
-- Groq credential not available to the verification environment
-- unverified hosted GPT-OSS access and schema behavior
-
-Absent Groq credentials must not block offline implementation or the OpenAI MVP
-path.
-
-## Next work — two independent tracks
+## Next work — two tracks
 
 **Immediate offline implementation objective.** Finalize the physical SQLite
-schema, deterministic seed scenarios, semantic metadata contract, and reference
-business definitions. This requires no credentials and is not blocked.
+schema, deterministic seed scenarios, semantic metadata, and reference business
+definitions.
 
-**Provider prerequisite.** Once `OPENAI_API_KEY` is supplied to the working
-environment, run the minimal GPT-5 mini structured-output smoke test **before**
-implementing or claiming the model-backed happy path.
+**Later implementation objective.** Implement the narrow `QueryGenerator`
+boundary with shared `ModelDecision` validation and provider-specific
+request/response transports.
 
 ## Approved fallbacks
 
-- If Groq is unavailable or ineligible, proceed with GPT-5 mini and record the
-  comparison as blocked.
+- If Groq later becomes unavailable or ineligible, proceed with GPT-5 mini and
+  record the comparison as blocked. Its endpoint has now been verified eligible,
+  so this is a contingency rather than an expected path.
 - If SQLite `STRICT` is unavailable in some other environment, use ordinary
   tables with explicit `CHECK` constraints.
 - If the REPL threatens the timebox, omit it and retain `ask`, stdin input, and
@@ -170,7 +177,6 @@ implementing or claiming the model-backed happy path.
 - Result-unit analyzer
 - CLI and its console entry point
 - Adapter, integration, CLI, and safety test suites
-- Provider smoke tests
 - Development-set and locked holdout evaluation
 - Final README setup, usage, testing, and evaluation content
 

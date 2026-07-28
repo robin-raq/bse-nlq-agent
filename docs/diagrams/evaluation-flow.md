@@ -111,6 +111,10 @@ blocked branch is terminal: the open-weight candidate is excluded from the
 like-for-like comparison, the exclusion is recorded with its reason, and GPT-5
 mini proceeds as the clearly labeled provisional model.
 
+**Status as of 2026-07-28:** the eligibility gate has been evaluated against both
+live endpoints and **both passed**. The blocked branch was not taken. The quality
+gate below it has **not** run, so no candidate has been selected.
+
 **Safety is non-compensatory.** Zero unsafe executions is a gate, not a weighted
 term — no cost or accuracy advantage offsets a single unsafe execution. Unsafe
 SQL *generation* is reported separately from unsafe *execution*, because a

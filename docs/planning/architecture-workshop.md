@@ -175,12 +175,13 @@ Recorded because they changed the design, not merely its wording.
 
 ## Unresolved risks carried into implementation
 
-**Second-candidate eligibility.** The open-weight comparison candidate is
-reachable only through a hosted endpoint, and strict schema enforcement is a
-property of that endpoint rather than of the model. Until a live smoke test
-confirms it, the comparison is provisional. If it fails, the comparison is
-recorded as blocked rather than presented as equivalent, and the primary model
-path proceeds unchanged.
+**Second-candidate eligibility — since resolved.** The open-weight comparison
+candidate is reachable only through a hosted endpoint, and strict schema
+enforcement is a property of that endpoint rather than of the model. A live
+endpoint smoke test on 2026-07-28 confirmed eligibility, so the comparison is no
+longer provisional. The contingency stands if the endpoint later becomes
+unavailable: record the comparison as blocked rather than present it as
+equivalent, and let the primary model path proceed unchanged.
 
 **Environment verification.** Strict-table support depends on the SQLite library
 bundled with the pinned interpreter, and foreign-key enforcement is per-connection

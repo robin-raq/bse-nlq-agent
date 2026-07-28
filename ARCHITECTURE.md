@@ -66,7 +66,7 @@ restructuring change and no replacement empty scaffolding will be created.
 | `schema/render.py` | Deterministic schema-context rendering |
 | `prompt.py` | Prompt composition only; consumes already-resolved dates |
 | `model/base.py` | `QueryGenerator` contract, `QueryRequest`, `ModelDecision` |
-| `model/openai_compatible.py` | Production adapter |
+| `model/transports.py` | Shared schema and invariant validation, plus the two explicit transport paths: OpenAI Responses and Groq Chat Completions |
 | `model/fake.py` | Deterministic test double |
 | `sql/validate.py` | Static AST policy |
 | `sql/authorizer.py` | Runtime default-deny authorization |
@@ -292,19 +292,48 @@ date resolution, structured output, and deterministic validation.
 ### Candidate model systems
 
 The comparison is between **deployed model systems**, not abstract weights.
-Neither endpoint has been smoke-tested yet.
+Both endpoints have been verified eligible by a single-request endpoint smoke
+test; neither has been evaluated for quality.
 
-| Role | Intended system |
-|---|---|
-| Required MVP path | GPT-5 mini through the OpenAI API |
-| Intended comparison candidate | `openai/gpt-oss-120b` through Groq, using Groq-issued credentials |
+| Role | System | Endpoint status |
+|---|---|---|
+| MVP path | GPT-5 mini through the OpenAI API, Responses transport | Eligible |
+| Comparison candidate | `openai/gpt-oss-120b` through Groq, Chat Completions transport, Groq-issued credentials | Eligible |
 
-The second candidate is eligible only if its live endpoint verifies model access,
-strict schema enforcement, support for the required flattened `ModelDecision`,
-and suitable OpenAI-compatible request behavior. If it is ineligible or
-unavailable, the comparison will be recorded as blocked and GPT-5 mini remains the
-clearly labeled provisional production model. The MVP must not be delayed or
-weakened to preserve a nominal two-model comparison.
+Eligibility means the endpoint authenticated, accepted the exact model
+identifier, accepted the strict flattened `ModelDecision` schema, and returned an
+object that passed local invariant validation. It does **not** mean the model
+produces correct SQL. Final model selection remains gated behind the frozen
+D-010 quality, safety, latency, and cost evaluation, which has not run.
+
+The MVP must not be delayed or weakened to preserve a nominal two-model
+comparison.
+
+### Model transport design
+
+The two endpoints share a contract but differ at the request/response boundary,
+so the design is a **shared core with one small provider-specific branch** — not
+configuration-only reuse.
+
+```
+QueryService
+  → QueryGenerator contract          (one interface)
+      → shared: prompt payload assembly, strict flattened schema,
+        ModelDecision parsing, local invariant validation,
+        normalized error vocabulary, transport retry policy
+      → branch: OpenAI Responses transport
+      → branch: Groq Chat Completions transport
+  ← normalized ModelDecision
+```
+
+The branch covers API surface, schema request nesting, output extraction,
+status/finish representation, token-limit parameter, and usage-field extraction.
+Everything else is shared.
+
+This is not a provider framework and does not authorize runtime failover or a
+model selector. The submitted runtime uses **one selected provider**; the second
+transport exists so evaluation can instantiate either eligible candidate
+deliberately.
 
 ## Terminal states
 

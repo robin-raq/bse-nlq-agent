@@ -56,8 +56,8 @@ ask the model to regenerate, repair, or correct its content.
 
 ## Model selection
 
-*Candidates selected; no endpoint has been smoke-tested yet, and no evaluation
-has run.*
+*Endpoint eligibility smoke tests passed for both deployed systems. No quality
+evaluation has run, and no model has been selected.*
 
 The comparison evaluates **deployed model systems**, not abstract weights — what
 varies between candidates is the endpoint's behavior, particularly whether it
@@ -73,13 +73,15 @@ structured output and minimal reviewer friction. The open-weight candidate is
 included to answer a question testing a single model cannot: whether a hosted
 open-weight system is sufficient for this task.
 
-**Eligibility is conditional.** The open-weight candidate enters the comparison
-only if live verification confirms model access, strict JSON-schema enforcement,
-support for the required flattened decision object, and suitable
-OpenAI-compatible request behavior. If it is ineligible or unavailable, the
-comparison will be **recorded as blocked**, and GPT-5 mini remains the clearly
-labeled provisional model. The MVP will not be delayed or weakened to preserve a
-nominal two-model comparison.
+**Both endpoints are eligible.** Live verification confirmed authentication,
+model access, acceptance of the strict flattened decision schema, and a response
+that passed local invariant validation — for OpenAI on the MVP path, and for
+Groq GPT-OSS on the planned comparison. Eligibility means the endpoint behaves
+as the contract requires; it says nothing about whether the model writes correct
+SQL.
+
+Single-request smoke-test latency was recorded for each endpoint but is **not
+comparative evidence** and is not reported here.
 
 **Selection method.** The quality gate is written down and frozen **before any
 formal result is viewed**, and cannot be lowered retroactively. Safety is
@@ -87,7 +89,9 @@ formal result is viewed**, and cannot be lowered retroactively. Safety is
 no cost or accuracy advantage offsets a single unsafe execution. Among candidates
 that pass the gate, the **least expensive eligible model** will be selected.
 
-Results are pending implementation and formal evaluation.
+**Final model selection remains pending** that frozen quality, safety, latency,
+and cost evaluation. Neither model has been chosen, and neither is described here
+as better than the other.
 
 ## Dataset
 

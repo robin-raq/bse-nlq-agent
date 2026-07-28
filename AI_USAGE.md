@@ -288,3 +288,74 @@ Application schema · deterministic seed script · semantic metadata · applicat
 database · connection factory · final authorizer policy · SQLGlot validator
 (not exercised in any phase so far) · fetch cap · production progress budget ·
 provider smoke tests · model adapter · model-quality evaluation.
+
+## 2026-07-28 — Provider endpoint prerequisite verification
+
+### Tools and approach
+
+Claude Code (Claude Opus) assisted in planning the smoke tests, choosing what
+would count as evidence, and reviewing the results. The ignored local `.env` was
+sourced into the probe process so credentials reached the SDK; **its contents
+were never displayed, and no credential value, prefix, or length was printed,
+logged, or persisted**. Probes ran from the session scratchpad, outside the
+repository.
+
+### Method
+
+- **One request per provider.** No troubleshooting request was needed, and no
+  semantic retry was performed.
+- The **same flattened `ModelDecision` schema** was used for both providers,
+  unchanged, with `strict: true` and `additionalProperties: false`.
+- The prompt was harmless and unrelated to the BSE dataset — a question about
+  weather posed to a hypothetical library-catalogue system, which should yield
+  `unsupported`. It also **instructed the model to add an undeclared property**,
+  so the probe could show whether the endpoint constrains the returned shape.
+- Local invariant validation used **stdlib logic only**. Pydantic was not used,
+  despite being transitively installed.
+
+### Surfaces exercised and sanitized results
+
+| | OpenAI | Groq |
+|---|---|---|
+| API surface | Responses | Chat Completions |
+| Base URL | default | `https://api.groq.com/openai/v1` |
+| Model requested | `gpt-5-mini` | `openai/gpt-oss-120b` |
+| Model returned | `gpt-5-mini-2025-08-07` | `openai/gpt-oss-120b` |
+| Status | `completed` | finish reason `stop` |
+| Fields returned | exactly the four required | exactly the four required |
+| Undeclared property induced | absent | absent |
+| Local invariants | pass | pass |
+| Latency (single sample) | 9,117 ms | 1,088 ms |
+| Usage | 155 in / 336 out / 491 total | 289 prompt / 343 completion / 632 total |
+
+Both returned `status="unsupported"` with `sql` and `clarification` null and a
+non-empty `explanation` — the correct pattern for that status. Only the sanitized
+status and null/non-null pattern were retained; no raw response, header, request
+identifier, or full prompt was persisted.
+
+Latency figures are **single observational samples** and are not comparative
+evidence.
+
+### Principal design finding
+
+**The configuration-only reuse hypothesis was disproven. The verified design is a
+shared core with a small provider-specific request/response boundary.** The two
+endpoints differ in API surface, schema request nesting, output extraction,
+status representation, token-limit parameter, and usage-field names — more than
+base URL, key, and model ID. They share one SDK, one exception hierarchy, one
+retry surface, and one schema both accepted unchanged.
+
+### Limitation
+
+**The Groq result is strong evidence of strict schema constraint at the endpoint,
+but the probe did not independently prove the provider's internal constrained
+decoding mechanism.** Proving that would require a probe designed to make
+compliance impossible by instruction, which exceeded the one-request budget. The
+schema was not weakened for either provider.
+
+### Repository and safety
+
+No repository mutation occurred during the probes: no tracked file changed, no
+untracked file was created inside the repository, and the tracked-file secret
+scan stayed clean. No application SQL was generated or executed, no application
+database was created, and no model-quality evaluation ran.

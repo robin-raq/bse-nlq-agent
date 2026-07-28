@@ -207,13 +207,69 @@ model call.
 
 **Candidate systems.** The comparison is between deployed model systems, not
 abstract weights. GPT-5 mini through the OpenAI API is the required MVP path.
-`openai/gpt-oss-120b` through Groq, using Groq-issued credentials, is the intended
-comparison candidate, eligible only if its live endpoint verifies model access,
-strict schema enforcement, support for the required flattened decision object, and
-suitable OpenAI-compatible request behavior. If ineligible or unavailable, the
-comparison is recorded as blocked and GPT-5 mini remains the clearly labeled
-provisional production model. The MVP is not delayed or weakened to preserve a
-nominal two-model comparison.
+`openai/gpt-oss-120b` through Groq, using Groq-issued credentials, is the
+comparison candidate. Both endpoints have since been **verified eligible** —
+see the provider-verification subsection below. The MVP is not delayed or
+weakened to preserve a nominal two-model comparison.
+
+### Provider verification (2026-07-28)
+
+Endpoint eligibility only, one request per provider, harmless prompt unrelated
+to the BSE dataset. **These are not quality claims.**
+
+**OpenAI — eligible for MVP endpoint integration.**
+
+- Responses API, default base URL
+- Requested alias `gpt-5-mini`; observed returned identifier
+  **`gpt-5-mini-2025-08-07`** — the alias and the resolved identifier are
+  distinct and must not be conflated
+- Strict flattened `ModelDecision` schema accepted
+- Exact-field check and local invariant checks passed
+
+**Groq — eligible for like-for-like comparison.**
+
+- Chat Completions through the OpenAI-compatible base URL
+  `https://api.groq.com/openai/v1`
+- Model `openai/gpt-oss-120b`
+- Same flattened schema accepted, with `strict: true` accepted
+- Exact-field check and local invariant checks passed
+- **Caveat:** the evidence supports endpoint eligibility but does **not**
+  independently prove the provider's internal constrained-decoding mechanism.
+  An explicitly requested undeclared property was absent from the response,
+  which is strong evidence of schema constraint but not proof of mechanism.
+
+Neither result establishes NLQ-to-SQL quality, SQL correctness, reliability,
+production readiness, comparative latency or cost, or final model selection.
+Selection remains gated behind the frozen D-010 evaluation.
+
+### Adapter consequence — verified
+
+The earlier configuration-only reuse hypothesis is **disproven**. The verified
+conclusion is:
+
+> **Shared core with one small provider-specific request/response branch.**
+
+Shared across both providers:
+
+- one `QueryGenerator` contract
+- one `ModelDecision` schema
+- one local invariant validator
+- one normalized error vocabulary
+- one shared retry policy at the transport boundary
+
+Provider-specific:
+
+- API surface (Responses vs Chat Completions)
+- schema request nesting
+- output extraction
+- status / finish representation
+- token-limit parameter
+- usage-field extraction
+
+Explicitly, this does **not** justify a generalized provider framework, and does
+**not** authorize runtime provider failover. The final production runtime still
+uses **one selected provider**. Evaluation may instantiate either eligible
+provider deliberately. **No third provider is added.**
 
 **Selection rule.** Choose the least expensive eligible model that satisfies the
 precommitted quality gate. The threshold is written down before any formal results
@@ -270,11 +326,11 @@ safety rejection; a test asserting execution failure triggers no repair.
 
 ### Hosting disposition for the open-weight candidate
 
-- **Groq-hosted `openai/gpt-oss-120b` is the only intended hosted open-weight
-  comparison endpoint for this submission.**
-- If Groq is unavailable, inaccessible, or ineligible, the comparison is
-  **recorded as blocked**.
-- GPT-5 mini proceeds provisionally.
+- **Groq-hosted `openai/gpt-oss-120b` is the only hosted open-weight comparison
+  endpoint for this submission.** Its endpoint has been verified eligible.
+- If Groq later becomes unavailable, inaccessible, or ineligible, the comparison
+  is **recorded as blocked** — now a contingency rather than an expected path.
+- GPT-5 mini proceeds as the MVP path pending D-010 model selection.
 - **Fireworks and other hosting providers are deferred alternatives**, not active
   fallbacks.
 - The application must **not** automatically try another provider.

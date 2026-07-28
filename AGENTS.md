@@ -1,204 +1,59 @@
-# AGENTS.md — BSE NLQ Candidate Exercise
+# Repository Guidance
 
-## Project Goal
+## Goal
 
-Build a focused Natural Language Query agent that:
+Build the smallest credible natural-language-to-SQL take-home: accept a question, generate and validate SQL, execute it read-only, return a concise answer, show the SQL, and handle common failures.
 
-1. Accepts a plain-English question.
-2. Generates valid SQL using a foundation model.
-3. Validates the generated SQL.
-4. Executes it against a structured database.
-5. Returns a concise human-readable answer.
-6. Displays the generated SQL for transparency.
-7. Handles common failures gracefully.
-
-This is a five-day candidate exercise, not a production platform.
-
-## Authority
+## Source of truth
 
 When instructions conflict, use this order:
 
-1. Current task instructions
-2. Exercise requirements
-3. Approved decisions in `docs/planning/decisions.md`
-4. The active approved implementation plan, when one exists
-5. `ARCHITECTURE.md`
-6. Repository workflow instructions in this file
-7. `PROJECT_STATUS.md` as the current operational handoff
-8. `README.md` and other supporting documentation
+1. Current task and exercise requirements
+2. `docs/planning/decisions.md`
+3. Active implementation plan
+4. `ARCHITECTURE.md`
+5. This file
+6. `PROJECT_STATUS.md`
+7. Supporting documentation
 
-Then general engineering best practices.
+`PROJECT_STATUS.md` tracks current work; it does not override architecture.
 
-Do not silently override a higher-authority source.
+## Scope
 
-Clarifications:
+Prioritize NLQ accuracy, prompt/schema context, SQL safety, separation of concerns, error handling, evaluation, reproducibility, and reviewer clarity.
 
-- `PROJECT_STATUS.md` owns the current phase, verified state, blockers, and the
-  exact next action. It is **not** architecture authority.
-- An implementation plan may sequence approved work. It may **not** override an
-  architectural decision.
-- **No Compound Engineering implementation plan currently exists.** Until one is
-  created and approved, `docs/planning/decisions.md` and `ARCHITECTURE.md` govern
-  design, while `PROJECT_STATUS.md` records the immediate operational handoff.
+Do not add authentication, deployment infrastructure, multi-turn memory, runtime multi-agent orchestration, background jobs, hosted observability, unnecessary cloud services, or a polished frontend without explicit approval.
 
-## Scope Discipline
-
-Prioritize:
-
-- NLQ accuracy
-- Prompt and schema-context design
-- SQL safety
-- Clear separation of concerns
-- Error handling
-- Meaningful evaluation
-- Reproducible setup
-- Clear documentation
-
-Do not add unless explicitly approved:
-
-- Authentication
-- Deployment infrastructure
-- Multi-turn memory
-- Multi-agent runtime orchestration
-- Background job systems
-- Production observability platforms
-- Unnecessary cloud services
-- A highly polished frontend
-
-Prefer the smallest architecture that demonstrates sound judgment.
-
-## Development Workflow
+## Workflow
 
 For behavior changes:
 
-1. Identify the intended behavior and acceptance criteria.
-2. Write or identify a failing test.
-3. Confirm the test fails for the expected reason.
-4. Implement the smallest change that makes it pass.
-5. Run focused tests.
-6. Run the full relevant suite.
-7. Run linting and type checks.
-8. Review the diff before committing.
+1. Define the expected behavior.
+2. Add or identify a failing test.
+3. Implement the smallest sufficient change.
+4. Run focused tests, then the relevant full suite.
+5. Run formatting, linting, and type checks.
+6. Review the diff and update affected documentation.
 
-Do not claim completion without showing validation evidence.
+Do not claim completion without validation evidence.
 
-## Architecture Rules
+## Engineering rules
 
-Keep these concerns separated:
-
-- Prompt and schema-context construction
-- Model invocation
-- Structured model-output parsing
-- SQL validation
-- Database execution
-- Response formatting
-- Evaluation
-
-Treat model output as untrusted input.
-
-Database execution must be read-only. Do not execute destructive or
-data-modifying SQL.
-
-Prefer deterministic application logic where an LLM is unnecessary.
-
-## Evaluation
-
-Do not evaluate correctness using exact SQL-string matching alone.
-
-Prefer execution-result comparison or explicit result invariants because
-different SQL queries may be semantically equivalent.
-
-Evaluation cases should cover:
-
-- Aggregation
-- Multi-table joins
-- Date filtering
-- Grouping
-- Ranking
-- Revenue calculations
-- Empty results
-- Ambiguous questions
-- Unsupported requests
-- Unsafe or malicious requests
-- Malformed model output
-
-Report limitations honestly.
+- Keep prompt construction, provider calls, model-output parsing, SQL policy, database execution, formatting, and evaluation separate.
+- Treat questions, model output, and generated SQL as untrusted.
+- Keep database execution read-only.
+- Prefer deterministic code wherever an LLM is unnecessary.
+- Evaluate answer correctness by execution results or explicit invariants, not SQL text alone.
+- Keep automated tests offline; live provider checks and evaluation are explicit commands.
+- Never commit secrets, `.env`, the private exercise PDF, raw chat transcripts, or scratch notes.
 
 ## Documentation
 
-Update documentation when architecture, setup, behavior, or tradeoffs change.
+- `README.md`: reviewer setup, usage, design summary, and results.
+- `ARCHITECTURE.md`: technical contract and boundaries.
+- `docs/planning/decisions.md`: concise rationale for consequential choices.
+- `PROJECT_STATUS.md`: current phase, blockers, next work, and verified state.
+- `AI_USAGE.md`: curated material AI assistance and candidate review.
+- `AI_USAGE.local.md`: optional private detail; ignored by Git.
 
-`AI_USAGE.md` is a mandatory completion gate for every implementation phase.
-Record:
-
-- AI tools and models used
-- Important prompts and decisions
-- Validation commands
-- Manual review performed
-- Mistakes and findings
-- Deferred or blocked work
-
-Do not commit secrets, `.env` files, or the private candidate exercise PDF.
-
-## Progress Tracking
-
-- `PROJECT_STATUS.md` is the concise current-state summary.
-- The active Compound Engineering plan is the source of truth for remaining work.
-- Git commits and validation output are the source of truth for completed work.
-- Do not maintain duplicate detailed task lists.
-- Update `PROJECT_STATUS.md` at phase boundaries, not after every minor edit.
-
-Read `PROJECT_STATUS.md` before beginning work. It is the current implementation
-handoff, not architecture authority — it never overrides the exercise, approved
-decisions, or `ARCHITECTURE.md`. Verify its claims against the repository when
-they are material to the task.
-
-Update it at meaningful phase boundaries. Record only verified completed work,
-the validation commands run and their outcomes, current blockers, approved
-fallbacks, and the exact next action. Replace or remove stale information rather
-than accumulating a permanent activity log. Never describe planned behavior as
-implemented.
-
-## Public and Private AI Records
-
-Committed AI documentation must be curated for reviewers. Do not place raw chat
-transcripts, complete prompt histories, private scratch notes, or routine agent
-interactions in tracked files.
-
-Use the records as follows:
-
-- `AI_USAGE.md`: public summary of material AI assistance
-- `AI_USAGE.local.md`: private detailed AI work log
-- `docs/planning/architecture-workshop.md`: public summary of design options,
-  tradeoffs, approved decisions, and unresolved risks
-- `docs/planning/architecture-workshop.local.md`: private workshop notes and
-  prompt fragments
-
-A material AI interaction is one that meaningfully affects:
-
-- Architecture
-- Technology selection
-- Scope
-- Security or safety controls
-- Implementation behavior
-- Testing or evaluation strategy
-- A substantive defect or correction
-- A submitted project artifact
-
-Routine commands, spelling changes, repeated prompts, exploratory dead ends,
-and minor wording assistance do not need individual disclosure.
-
-When an important prompt influenced the submitted work, summarize its purpose
-and effect. Do not publish the entire prompt unless the exact wording is itself
-necessary to understand or reproduce the decision.
-
-Before completing a phase:
-
-1. Update the private work log as useful during development.
-2. Promote only material and reviewer-relevant information to `AI_USAGE.md`.
-3. Confirm committed planning files contain summaries rather than transcripts.
-4. Review all tracked documentation for secrets, private material, or excessive
-   internal process detail.
-
-The `AI_USAGE.md` completion gate requires an accurate curated disclosure. It
-does not require a complete history of every AI interaction.
+Update only the document that owns the changed fact. Avoid parallel histories and duplicate task lists.

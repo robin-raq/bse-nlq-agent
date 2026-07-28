@@ -18,14 +18,28 @@ This is a five-day candidate exercise, not a production platform.
 
 When instructions conflict, use this order:
 
-1. The original BSE candidate exercise
-2. User-approved decisions in `docs/planning/decisions.md`
-3. The active Compound Engineering plan
-4. `ARCHITECTURE.md`
-5. This file
-6. General engineering best practices
+1. Current task instructions
+2. Exercise requirements
+3. Approved decisions in `docs/planning/decisions.md`
+4. The active approved implementation plan, when one exists
+5. `ARCHITECTURE.md`
+6. Repository workflow instructions in this file
+7. `PROJECT_STATUS.md` as the current operational handoff
+8. `README.md` and other supporting documentation
+
+Then general engineering best practices.
 
 Do not silently override a higher-authority source.
+
+Clarifications:
+
+- `PROJECT_STATUS.md` owns the current phase, verified state, blockers, and the
+  exact next action. It is **not** architecture authority.
+- An implementation plan may sequence approved work. It may **not** override an
+  architectural decision.
+- **No Compound Engineering implementation plan currently exists.** Until one is
+  created and approved, `docs/planning/decisions.md` and `ARCHITECTURE.md` govern
+  design, while `PROJECT_STATUS.md` records the immediate operational handoff.
 
 ## Scope Discipline
 

@@ -168,10 +168,12 @@ prompt engineering is an explicitly scored criterion. Orchestration exists;
 application code owns it.
 
 **Why model output is treated as untrusted.** The exercise does not ask for SQL
-safety. Model-generated SQL is nonetheless input from outside the trust boundary,
-and structured output guarantees the *shape* of a response, never its truth. A
-perfectly schema-valid response can contain SQL that is wrong, unsafe, or answers
-a different question.
+safety. Model-generated SQL is nonetheless input from outside the trust boundary.
+When strict provider-side schema enforcement is available and verified, it
+constrains the *shape* of a response, never its truth; local validation owns the
+cross-field invariants; and neither layer guarantees SQL safety, SQL correctness,
+result correctness, or business correctness. A perfectly schema-valid response can
+contain SQL that is wrong, unsafe, or answers a different question.
 
 **Why six independent safety layers rather than one control.** Read-only
 connection URI, session-level query-only pragma, static AST policy, a default-deny

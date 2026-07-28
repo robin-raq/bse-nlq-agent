@@ -49,7 +49,13 @@ property of the query rather than guessed from data.
 
 ## Component responsibilities
 
-*Target module layout. None of these files exist yet.*
+The single named application package is **`src/bse_nlq/`**. No second top-level
+package is approved. Modules are created only when they contain real
+implementation or an immediately required contract; the speculative placeholder
+packages currently in the repository will be removed during the isolated
+restructuring change and no replacement empty scaffolding will be created.
+
+*Target module layout, relative to `src/bse_nlq/`. None of these files exist yet.*
 
 | Component | Owns |
 |---|---|
@@ -81,8 +87,9 @@ Untrusted input consists of the user's question and **everything the model
 returns**. Trusted inputs are the introspected schema, the curated semantic
 metadata, and application code.
 
-Provider-native structured output guarantees the *shape* of a response. It
-guarantees nothing about SQL safety, SQL correctness, or business correctness.
+When strict provider-side schema enforcement is available and verified, it
+constrains the *shape* of a response only. It establishes nothing about SQL
+safety, SQL correctness, result correctness, or business correctness.
 Prompt instructions request correct behavior; deterministic validation enforces
 the permitted boundary.
 
@@ -241,14 +248,41 @@ testability and replaceability seam, not a provider abstraction layer, and it do
 not imply runtime model switching. The submitted application must expose no model
 selector, no provider failover, and no silent fallback.
 
-`ModelDecision` is a flat object with all fields present and required at the
-schema level and optional values represented as nullable. The provider enforces
-valid JSON, required fields, types, allowed status values, and the prohibition of
-undeclared properties. The application must enforce the state invariants — SQL
-present only for a generated-SQL decision, clarification present only for a
-clarification decision — and reject contradictory combinations. Discriminated
-unions are avoided unless both live endpoints are shown to support the identical
-construct.
+### The `ModelDecision` contract
+
+Every provider-completed response maps to one flattened object with all four
+fields present.
+
+| Field | Type |
+|---|---|
+| `status` | one of `sql_generated`, `clarification_required`, `unsupported` |
+| `sql` | string or null |
+| `clarification` | string or null |
+| `explanation` | string or null |
+
+All four fields are required at the schema level; additional properties are
+prohibited; optional values are expressed as nullable rather than omitted.
+
+Local invariants, enforced by the application after a shape-valid object
+arrives. All four fields are specified for every status.
+
+| `status` | `sql` | `clarification` | `explanation` |
+|---|---|---|---|
+| `sql_generated` | nonempty string | **null** | string or null |
+| `clarification_required` | **null** | nonempty string | string or null |
+| `unsupported` | **null** | **null** | nonempty string, a concise user-facing reason |
+
+Any contradiction, or any missing required semantic value, maps to
+`invalid_model_output`.
+
+**When strict provider-side schema enforcement is available and verified, it
+constrains response shape only. Local application validation owns the
+cross-field invariants.** Neither layer guarantees SQL safety, SQL correctness,
+result correctness, or business correctness.
+
+No discriminated-union dependency is introduced. The flattened shape keeps the
+contract enforceable on endpoints whose strict mode supports only a subset of
+JSON Schema.
 
 Sampling parameters stay at supported defaults. The model must never be described
 as deterministic. Variability is reduced through a fixed model ID, a tightly

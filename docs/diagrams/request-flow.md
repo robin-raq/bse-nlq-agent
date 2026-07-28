@@ -91,20 +91,54 @@ Both produce the same shape of outcome; only one of them is a security decision.
 ## Independent execution controls
 
 ```mermaid
-flowchart LR
-    sql["Validated SQL"] --> L1["1. Read-only connection URI"]
-    L1 --> L2["2. PRAGMA query_only"]
-    L2 --> L3["3. Static AST policy"]
-    L3 --> L4["4. Default-deny authorizer<br/>returns explicit denial"]
-    L4 --> L5["5. Progress instruction budget<br/>bounds computation"]
-    L5 --> L6["6. Fetch cap<br/>bounds materialization"]
-    L6 --> out["Raw result"]
+flowchart TD
+    sql["Model-generated SQL<br/>untrusted"]
+
+    subgraph static["STATIC PRE-EXECUTION POLICY - no database contact"]
+        direction TB
+        p1["SQLGlot parse"]
+        p2["Exactly one non-empty statement"]
+        p3["Approved read-only query family"]
+        p4["Forbidden-node walk, whole tree"]
+        p5["Physical-table policy<br/>CTE and derived names excluded"]
+        p6["Function policy, fail closed"]
+        p7["Unit / alias contradiction validation"]
+        p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7
+    end
+
+    subgraph runtime["CONNECTION AND RUNTIME ENFORCEMENT - SQLite"]
+        direction TB
+        r1["Read-only connection URI"]
+        r2["PRAGMA query_only"]
+        r3["Default-deny authorizer<br/>explicit denial during prepare"]
+        r4["Progress instruction budget<br/>bounds computation"]
+        r5["Fetch cap<br/>bounds materialization"]
+        r1 --> r2 --> r3 --> r4 --> r5
+    end
+
+    sql --> static
+    static -->|"rejected"| rej["query_rejected<br/>never reaches the database"]
+    static -->|"approved"| runtime
+    runtime --> out["Raw result"]
+
+    classDef bad fill:#fbeaea,stroke:#a33
+    class rej bad
 ```
+
+**Nothing in the static block touches the database.** A query rejected there is
+never submitted to SQLite at all. The runtime block engages only once static
+policy has approved the statement.
+
+The **six independent safety layers** are: the static AST policy as a whole
+(one layer, with the checks listed above), plus the read-only connection URI,
+`PRAGMA query_only`, the default-deny authorizer, the progress instruction
+budget, and the fetch cap.
 
 These layers matter because they **fail for different reasons**. A construct
 SQLGlot parses differently from SQLite still meets the authorizer, which runs
-inside SQLite on the real execution plan. A misconfigured authorizer still meets
-the read-only connection. No single mistake opens a write path.
+inside SQLite on the real execution plan rather than on our parse tree. A
+misconfigured authorizer still meets the read-only connection. No single mistake
+opens a write path.
 
 The fetch cap bounds returned materialization; the progress budget bounds
 computation. Neither replaces the other.

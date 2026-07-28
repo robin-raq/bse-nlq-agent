@@ -3,8 +3,26 @@
 Approved decisions from the architecture workshop. Each entry records the
 decision, why it was made, what it costs, and how it will be validated.
 
-Authority order: the original BSE candidate exercise, then decisions recorded
-here, then `AGENTS.md`, then other repository documentation.
+## Authority order
+
+1. Current task instructions
+2. Exercise requirements
+3. Approved decisions in this document
+4. The active approved implementation plan, when one exists
+5. `ARCHITECTURE.md`
+6. Repository workflow instructions in `AGENTS.md`
+7. `PROJECT_STATUS.md` as the current operational handoff
+8. `README.md` and other supporting documentation
+
+Then general engineering best practices.
+
+`PROJECT_STATUS.md` owns the current phase, verified state, blockers, and the
+exact next action; it is **not** architecture authority. An implementation plan
+may sequence approved work but may **not** override an architectural decision.
+
+**No Compound Engineering implementation plan currently exists.** Until one is
+created and approved, this document and `ARCHITECTURE.md` govern design, while
+`PROJECT_STATUS.md` records the immediate operational handoff.
 
 Status of all entries below: **Approved 2026-07-27 / 2026-07-28.** No
 implementation has been written; these are specifications.
@@ -202,6 +220,43 @@ precommitted quality gate. The threshold is written down before any formal resul
 are reviewed. If neither candidate passes, the threshold is not lowered
 retroactively.
 
+### The `ModelDecision` contract (authoritative)
+
+Every provider-completed response maps to **one flattened object with all four
+fields present**.
+
+| Field | Type |
+|---|---|
+| `status` | one of `sql_generated`, `clarification_required`, `unsupported` |
+| `sql` | string or null |
+| `clarification` | string or null |
+| `explanation` | string or null |
+
+**Schema-level rules.** All four fields are required. Additional properties are
+prohibited. Optional values are expressed as nullable rather than omitted.
+
+**Local invariant rules**, enforced by the application after a shape-valid object
+arrives. All four fields are specified for every status.
+
+| `status` | `sql` | `clarification` | `explanation` |
+|---|---|---|---|
+| `sql_generated` | nonempty string | **null** | string or null |
+| `clarification_required` | **null** | nonempty string | string or null |
+| `unsupported` | **null** | **null** | nonempty string, a concise user-facing reason |
+
+**Any contradiction, or any missing required semantic value, maps to
+`invalid_model_output`.**
+
+**Division of responsibility.** When strict provider-side schema enforcement is
+available and verified, it constrains **response shape only**. Local application
+validation owns the **cross-field invariants**. Neither layer guarantees SQL
+safety, SQL correctness, result correctness, or business correctness — those are
+established by the deterministic pipeline and by evaluation.
+
+**No discriminated-union dependency is introduced.** The flattened shape is
+chosen precisely so the contract remains enforceable on endpoints whose strict
+mode supports only a subset of JSON Schema.
+
 **Consequences.** The contract and fake are what make an offline test suite and a
 reusable evaluation harness possible at all. Deterministic formatting means the
 answer cannot assert anything the executed result does not support.
@@ -213,8 +268,27 @@ offline path the primary demonstration route.
 exercised through the fake; a test asserting the model is not called again after a
 safety rejection; a test asserting execution failure triggers no repair.
 
-**Deferred alternatives.** Anthropic Claude; Amazon Bedrock; a second constrained
-model call for formatting; a bounded one-shot SQL repair.
+### Hosting disposition for the open-weight candidate
+
+- **Groq-hosted `openai/gpt-oss-120b` is the only intended hosted open-weight
+  comparison endpoint for this submission.**
+- If Groq is unavailable, inaccessible, or ineligible, the comparison is
+  **recorded as blocked**.
+- GPT-5 mini proceeds provisionally.
+- **Fireworks and other hosting providers are deferred alternatives**, not active
+  fallbacks.
+- The application must **not** automatically try another provider.
+- **No third provider is to be added during the MVP** merely to preserve the
+  two-candidate comparison.
+
+Earlier private workshop notes explored Fireworks as a primary or fallback host.
+**Tracked decisions in this document override superseded private workshop
+experiments.** Where an ignored local note and this document disagree, this
+document governs.
+
+**Deferred alternatives.** Anthropic Claude; Amazon Bedrock; Fireworks or another
+hosted open-weight provider; a second constrained model call for formatting; a
+bounded one-shot SQL repair.
 
 ---
 
@@ -492,16 +566,102 @@ all-runs consistency are reported as primary, and majority-of-runs only as a
 diagnostic — majority voting is neither a selection metric nor implemented in the
 application, because production makes one semantic attempt per request.
 
-**Quality gate.** Precommitted, with a minimum holdout size and a minimum number
-of cases in each gated slice so no percentage is computed over a meaningless
-denominator. Zero unsafe executions is non-compensatory: no cost or accuracy
-advantage offsets one. Unsafe SQL generation is reported separately from unsafe
-execution, since a blocked prohibited query is a model-quality failure and a
-safety-control success. Structured-contract compliance and transport availability
-are measured separately, because a timeout is not malformed output. Integer counts
-accompany every percentage. Latency is descriptive evidence with its sample count,
-not a precise statistical estimate. Cost is compared only after eligibility, with
-the pricing source and snapshot date recorded.
+### The precommitted quality gate
+
+Written down and frozen **before any formal result is reviewed**.
+
+**Evaluation composition**
+
+- Locked holdout contains **at least 24 cases**
+- Multi-label tagging is allowed
+- Formal comparison uses **k = 3** independent runs per case, for every eligible
+  candidate
+
+**Percentage-gated critical slices** — five slices, each carrying an 80%
+threshold:
+
+- joins
+- date filtering
+- revenue calculations
+- ambiguous requests
+- unsupported requests
+
+Each percentage-gated slice must contain **at least 4 cases**, and each must meet
+its 80% threshold.
+
+**Mandatory adversarial and safety coverage** — **not** a percentage-gated slice:
+
+- The locked holdout must include **at least 4 adversarial or safety-oriented
+  cases**
+- These cases are governed by the **non-compensatory requirement of exactly zero
+  unsafe executions**, not by a percentage threshold
+- Unsafe SQL *generation*, correctly *blocked* prohibited SQL, and unsafe
+  *execution* are reported separately
+- **No additional 80% safety-slice threshold exists.** Do not invent one.
+
+A prohibited query that is generated and blocked is a **model-quality failure**
+and a **safety-control success**. A **single prohibited execution fails endpoint
+eligibility**, regardless of any other result.
+
+Adversarial cases remain part of overall per-run task-success reporting.
+
+**Non-compensatory safety gate**
+
+- Unsafe executions: **exactly 0**
+
+Unsafe SQL *generation* is reported separately from unsafe *execution*. A
+prohibited query that is generated and blocked is a **model-quality failure** and
+a **safety-control success**. A single prohibited execution fails eligibility
+regardless of cost or any other accuracy result.
+
+**Structured contract and availability** — measured separately, because a timeout
+is not malformed output and a completed contract violation is not a transport
+failure.
+
+- Locally valid `ModelDecision` among completed provider responses: **100%**
+- Provider completion after bounded transport retries: **at least 98%**
+
+**End-to-end quality**
+
+- Overall per-run task-success rate: **at least 85%**
+- Answerable-case result correctness: **at least 85%**
+- All-three-runs case-consistency rate: **at least 75%**
+
+**Percentage-gated critical slices**, measured across runs — five slices only
+
+- Joins: at least 80%
+- Date filtering: at least 80%
+- Revenue calculations: at least 80%
+- Ambiguous requests classified `clarification_required`: at least 80%
+- Unsupported requests classified `unsupported`: at least 80%
+
+Adversarial and safety coverage is **not** in this list; it is governed by the
+zero-unsafe-execution gate above.
+
+Always report integer counts alongside percentages. **Do not apply a percentage
+gate to a slice with fewer than four cases.**
+
+**Latency**
+
+- Completed provider-call p95 hard ceiling: **15 seconds**
+- Target: 10 seconds or less
+
+Report the sample count. Do not imply high statistical precision from a small
+benchmark.
+
+**Cost** — no fixed monetary threshold is approved. For every eligible candidate
+report mean cost per request, mean cost per successful task, projected cost per
+1,000 requests, total benchmark cost, and the pricing source with its snapshot
+date. **Cost is considered only after all eligibility gates pass.**
+
+**Stability reporting** — report per-run success, all-three-runs consistency, and
+the majority-of-three rate. The majority rate is **diagnostic only**: it is not a
+model-selection metric and is never implemented in the production application.
+
+**Failed gate behavior** — thresholds may not be lowered after results are
+reviewed. A changed prompt, metadata file, model configuration, or comparator
+starts a new documented iteration. A new final held-out claim requires a **new
+locked holdout**.
 
 **On failure.** Thresholds are not lowered after reviewing results. A failing
 candidate produces a recorded failure, and any change is a new documented
@@ -585,6 +745,18 @@ committed to a decomposition before any architecture decision existed. Structure
 should follow the approved architecture, not precede it. A `src` layout prevents
 accidental working-directory imports from masking packaging errors.
 
+**Approved package name.** The single named application package is
+**`src/bse_nlq/`**.
+
+- `bse_nlq` is the one application package; no second top-level package is
+  approved.
+- The existing speculative placeholder packages (`src/agent/`, `src/database/`,
+  `src/response/`, the placeholder `src/sql/`, `src/evals/`, and `tests/evals/`)
+  will be removed during the isolated restructuring change.
+- **No replacement empty scaffolding is to be created.**
+- Package modules are created **only** when they contain real implementation or
+  an immediately required contract.
+
 **Approved structure.** One application package containing flat modules for the
 command-line entry point, application service, configuration, shared contracts,
 typed errors, date handling, prompt composition, database access, formatting,
@@ -665,6 +837,43 @@ databases are never committed.
 behavior. Afterward, package import succeeds, console-script help succeeds once
 entry points exist, test discovery remains offline, and the working tree contains
 no unexplained empty placeholder structure.
+
+---
+
+## Implementation-owned constants and freeze points
+
+The following values are **implementation configuration with explicit freeze
+points**, not unresolved architecture principles. Each mechanism is already
+approved; only the concrete value remains, and none may be invented arbitrarily.
+
+**Fetch cap.** The mechanism is approved. The numeric N is an implementation
+configuration value, chosen during executor and CLI implementation. Test N, N+1,
+zero rows, and truncation behavior. **Freeze before development evaluation.**
+
+**Progress-handler budget.** The mechanism is approved. The budget must be
+*measured* against the deterministic seeded database, not guessed. Choose an
+initial conservative value during database implementation, and test both ordinary
+queries and intentionally expensive ones. **Freeze before the locked holdout.**
+
+**Default `as_of`.** An explicit configured default is required; no machine-clock
+fallback is allowed. Select the concrete default once the deterministic dataset
+timeline is finalized. **Freeze before prompt and date evaluation cases are
+written.**
+
+**Function allowlist.** The fail-closed policy is approved. Exact SQLGlot
+expression forms and SQLite function entries are finalized after the
+parser/authorizer spike. The list must be explicit and test-covered **before any
+model-generated SQL is executed.**
+
+**Reason codes.** One canonical enum is required, and it must include the
+already-approved `result_unit_mismatch`. The full enum is finalized alongside the
+contracts and validator implementation. **No duplicate free-form reason strings
+may be created across modules.** Freeze before CLI and evaluation integration.
+
+**JSON response schema.** The exact serialized v1 envelope remains implementation
+pending. The `generated_sql` and `executed_sql` semantics recorded in D-006 are
+already authoritative. Serialization must be frozen **before the evaluation
+harness consumes it**, and the harness must never parse human-readable output.
 
 ---
 

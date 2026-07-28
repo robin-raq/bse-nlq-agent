@@ -134,6 +134,17 @@ Do not commit secrets, `.env` files, or the private candidate exercise PDF.
 - Do not maintain duplicate detailed task lists.
 - Update `PROJECT_STATUS.md` at phase boundaries, not after every minor edit.
 
+Read `PROJECT_STATUS.md` before beginning work. It is the current implementation
+handoff, not architecture authority — it never overrides the exercise, approved
+decisions, or `ARCHITECTURE.md`. Verify its claims against the repository when
+they are material to the task.
+
+Update it at meaningful phase boundaries. Record only verified completed work,
+the validation commands run and their outcomes, current blockers, approved
+fallbacks, and the exact next action. Replace or remove stale information rather
+than accumulating a permanent activity log. Never describe planned behavior as
+implemented.
+
 ## Public and Private AI Records
 
 Committed AI documentation must be curated for reviewers. Do not place raw chat

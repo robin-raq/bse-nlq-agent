@@ -622,11 +622,39 @@ they contain real tests. No replacement empty scaffolding is created.
 The empty architecture-review placeholder is removed and not replaced by another
 planning-status document. Diagrams are retained, with the primary system diagram
 embedded directly in the README, which is the reviewer's primary entry point.
-`PROJECT_STATUS.md` is removed from the final submission: its useful information
-belongs in the README, the architecture summary, test output, the committed
-evaluation report, and the limitations section, and a second status document
-risks going stale and creating claims a reviewer must reconcile. Repository audit
-counts are never presented as application test results.
+Repository audit counts are never presented as application test results.
+
+### `PROJECT_STATUS.md` — retained (supersedes the earlier removal decision)
+
+**Decision.** `PROJECT_STATUS.md` is **retained** as the repository's concise
+implementation handoff and persistent context document for coding agents.
+
+**Purpose.** It communicates the current implementation phase, verified
+repository state, most recently completed work, immediate next actions, active
+blockers, approved fallbacks, validation commands and outcomes, and work
+explicitly not yet completed. It must remain concise and current.
+
+**It must not duplicate:** architectural rationale from this document; reviewer
+setup and usage instructions from `README.md`; workshop history from
+`architecture-workshop.md`; AI-assistance disclosure from `AI_USAGE.md`.
+
+**It must not contain:** stale test counts; speculative completion percentages;
+unverified claims; planned behavior described as implemented; long historical
+activity logs.
+
+**Why this reverses the earlier decision.** The prior decision removed
+`PROJECT_STATUS.md` on the grounds that it was a redundant *reviewer-facing*
+status document whose content belonged in the README, the architecture summary,
+test output, and the evaluation report. That reasoning misidentified its role. Its
+actual role is **operational**: preserving implementation context and handoff
+state for coding agents across sessions. That role is distinct from `README.md`
+and the architecture documents, none of which carry session-to-session working
+state. The original concern — that a second status document goes stale and
+creates claims a reviewer must reconcile — is addressed by the content
+constraints above rather than by deletion.
+
+`PROJECT_STATUS.md` is **not** architecture authority. It never overrides
+approved decisions recorded in this document.
 
 **Ignore policy.** Generated database files remain ignored and dead commentary is
 removed. Committed formal evaluation reports are not ignored. Credentials,

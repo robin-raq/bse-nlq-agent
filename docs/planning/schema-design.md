@@ -29,6 +29,9 @@ totals, and the 14 development anchors.
 
 Revenue path: `order_items → ticket_tiers → events → venues`.
 
+An entity-relationship diagram of these tables is in
+[`docs/diagrams/schema-erd.md`](../diagrams/schema-erd.md).
+
 All tables are `STRICT`. Foreign keys use `ON UPDATE RESTRICT ON DELETE RESTRICT`.
 `PRAGMA foreign_keys=ON` must be set on the seeding connection.
 
@@ -246,16 +249,58 @@ Round-half-up on positive integers is `(2a + b) / (2b)`. Verified exact for
 `AVG(unit_price_cents)` is wrong for average ticket price: it weights line items
 rather than tickets.
 
-### Sold-out semantics
+### Ambiguity policy
 
-The bare question "which events sold out?" is **ambiguous** and must resolve to
-`clarification_required`, distinguishing:
+Four question shapes are ambiguous by contract. Each must reach
+`clarification_required`. **No default may be selected silently**, even when one
+reading looks more common.
+
+#### Bare revenue
+
+Unqualified "revenue" or "ticket revenue" is ambiguous between **gross ticket
+revenue** and **net ticket revenue after refunds**. The clarification must name
+both. Defaulting to either is a defect: on this dataset the two differ by
+810,000 cents overall, and for a cancelled event they differ by the entire
+amount.
+
+#### Best event
+
+"Best event" requires clarification of the metric — gross revenue, net revenue,
+tickets sold, attendance, or attendance rate. **Also request a period when none
+is supplied.** The metrics disagree: the top event by gross revenue is not the
+top by attendance rate.
+
+#### How are sales doing?
+
+Requires clarification of the **metric**, the **time period**, and — when a trend
+judgment is requested — the **comparison or baseline** against which "doing well"
+is being assessed. A bare trend question supplies none of the three.
+
+#### Sold out
+
+The bare question "which events sold out?" is ambiguous between:
 
 - **ever reached capacity** — `tickets_sold >= events.capacity`
 - **currently at capacity** — `tickets_net >= events.capacity`
 
-Neither interpretation may be selected silently. The seed makes the readings
-disagree (see E11 below).
+The seed makes the readings disagree (see E11 below), so a silent choice is
+detectable rather than hidden behind two identical empty results.
+
+### Time-of-day limits on `as_of`
+
+`as_of` is a **date and carries no time of day**. The application therefore
+cannot resolve any question that depends on the current moment within that day.
+
+Questions such as "has tonight's show started?", "which events begin after 6 PM
+today?", and "what is happening right now?" are **unsupported by the MVP** and
+must reach `unsupported_question`.
+
+No midnight or end-of-day convention is invented to make them answerable — any
+such convention would produce confidently wrong answers rather than an honest
+refusal.
+
+A question that supplies an explicit absolute timestamp and does not depend on
+"now" remains answerable, because `start_local` stores full wall-clock time.
 
 ## Seed
 
@@ -265,6 +310,22 @@ every evaluation number inherits the seed's correctness.
 
 All names, districts, and figures are invented. No real organization or dataset
 is referenced.
+
+The exact deterministic literals — every row of all six tables, including
+identifiers, event names, order references, purchase timestamps, and
+order-to-line packing — are frozen in
+[`seed-manifest.md`](seed-manifest.md). The tables below are the
+analytic summary; the manifest is what the seed module must reproduce.
+
+**Paid-price divergence is intentional and limited to two cases.** Actual paid
+price differs from tier list price only on the E7 hockey lines, where a
+complimentary line (`unit_price_cents = 0` against a 12,000 list price) sits
+alongside full-price lines. Those two cases together are the MVP's entire
+paid-versus-list divergence surface: they are enough to make substituting
+`face_value_cents` for `unit_price_cents` produce a detectably wrong answer
+(A8 returns 7,500 correctly and 9,000 incorrectly). No additional discounted line
+is introduced, because a third variant would change reconciliation totals without
+testing a new failure mode.
 
 ### Venues
 
@@ -390,8 +451,8 @@ Every order's `purchased_at` precedes its event's `start_local`; every refund's
 | Month and year boundaries | E2→E3→E4 | Period arithmetic |
 
 E10 and E12 are the sharpest pair: E10 has sales and zero net revenue; E12 has no
-sales. "Events with no revenue" returns both; "events with no sales" returns only
-E12.
+sales. "Events with **zero net ticket revenue**" returns both; "events with no
+sales" returns only E12.
 
 ### Reconciliation totals
 
@@ -417,9 +478,57 @@ loudly on a deliberately corrupted fixture.
 | I-3 | `events.capacity <= venues.capacity` |
 | I-4 | `orders.purchased_at < events.start_local` |
 | I-5 | `refunds.refunded_at > orders.purchased_at` |
-| I-6 | Cancelled events are fully refunded |
+| I-6 | Cancelled events are fully refunded — exact definition below |
 | I-7 | All line items in one order belong to one event |
 | I-8 | **`tickets_sold <= events.capacity`** |
+
+### I-6 stated exactly
+
+For **every `order_items` row whose order status is `completed` and whose event
+status is `cancelled`**, both equalities must hold:
+
+```
+SUM(refunds.refunded_qty)         =  order_items.quantity
+SUM(refunds.refund_amount_cents)  =  order_items.line_gross_cents
+```
+
+Lines belonging to **cancelled orders are excluded**, because such lines never
+contributed to gross revenue or `tickets_sold` and so have nothing to return.
+
+Both equalities are required because the two refund measures are independent
+(see below). The quantity equality alone would accept a cancelled event whose
+money was never returned; the amount equality alone would accept one whose
+tickets were never released.
+
+The rule holds for complimentary tickets without special-casing: a comp line has
+positive `quantity` and `line_gross_cents = 0`, so full refund means positive
+`refunded_qty` and `refund_amount_cents` summing to **zero**. Zero is the correct
+full refund of nothing.
+
+### Refund measures are independent
+
+`refunded_qty` and `refund_amount_cents` measure different things and are
+deliberately not tied to one another:
+
+| Measure | Governs |
+|---|---|
+| `refunds.refunded_qty` | `tickets_net` — how many tickets came back |
+| `refunds.refund_amount_cents` | net revenue — how much money went back |
+
+Neither is derived from the other, and **no proportionality between them is
+inferred**. A per-ticket refund value is not implied, and an alias resembling one
+measure never establishes the other. A returned complimentary ticket is the
+clearest case: `refunded_qty` is positive while `refund_amount_cents` is zero,
+which is correct and must not be flagged as inconsistent.
+
+`refunded_qty` and `refund_amount_cents` are intentionally independent measures.
+No proportionality constraint connects them. Their aggregate upper bounds are
+enforced by I-1 and I-2, in addition to the ordinary row-level DDL constraints on
+each refund record.
+
+There is no proportional-refund invariant and no I-9.
+
+### I-8 comparison direction
 
 **I-8 must be asserted as `<=`, not `<`.** E11 sits on the equality boundary
 (`tickets_sold` 33 = capacity 33); a strict comparison would reject a
@@ -448,7 +557,7 @@ aliases, and explicit ordering. None uses `CURRENT_DATE`, `date('now')`, or
 |---|---|---|---|
 | A1 | Which event had the highest gross ticket revenue? | cents | E8, 1,700,000 |
 | A2 | Top 3 events by net ticket revenue | cents | E8 1,700,000 · E1 700,000 · E7 600,000 |
-| A3 | Total ticket revenue for events in February 2026 | cents | 1,400,000 |
+| A3 | What was **gross** ticket revenue for events in February 2026? | cents | 1,400,000 |
 | A4 | How much did we book in January 2026? | cents | 2,000,000 |
 | A5 | Tickets sold for events at Ironworks Music Hall | tickets | 300 |
 | A6 | Which venue generated the most net revenue? | cents | Kings Harbor Arena, 3,045,000 |
@@ -456,7 +565,7 @@ aliases, and explicit ordering. None uses `CURRENT_DATE`, `date('now')`, or
 | A8 | Average ticket price for the hockey game | cents_per_item | 7,500 |
 | A9 | Total refunded by event | cents | E10 500,000 · E3 150,000 · E5 75,000 · E2 60,000 · E11 25,000 |
 | A10 | What events are coming up? | events | E14 · E11 · E12 · E13 (4 rows) |
-| A11 | Revenue by sales channel | cents | web 2,750,000/277 · mobile_app 1,790,000/325 · box_office 1,380,000/180 · partner 1,350,000/175 |
+| A11 | Gross revenue and tickets sold by sales channel | cents + tickets | `gross_revenue_cents` / `tickets_sold`: web 2,750,000 / 277 · mobile_app 1,790,000 / 325 · box_office 1,380,000 / 180 · partner 1,350,000 / 175 |
 | A12 | Which event had the best attendance rate? | dimensionless (`_bp`) | E3, 9,833 bp |
 | A13 | Which events **ever** sold out? | events | E11 only (1 row) |
 | A14 | Which events are **currently** sold out? | events | **Empty result (0 rows)** |
@@ -561,6 +670,22 @@ Notes that must appear verbatim in effect:
 - `line_gross_cents` — "Already the product of paid price and quantity. DO NOT
   multiply by quantity again."
 - `order_ref` — `in_prompt: false`, display-only.
+
+Model-facing distinctions the sidecar must carry, because introspection cannot
+express them and a model will otherwise guess wrong:
+
+- **`venues.capacity` is the venue's physical maximum**, across all
+  configurations.
+- **`events.capacity` is the capacity released for that specific event**, which
+  may be far lower.
+- **Sold-out calculations use `events.capacity`**, never `venues.capacity`.
+- **`ticket_tiers.tier_name` is not globally unique.** It is unique only within
+  one event, so the same name recurs across events at different list prices.
+- **Grouping by `tier_name` across events combines distinct offerings** and must
+  be a deliberate choice, not an accident of the name repeating.
+
+The metadata must also state the ambiguity policy and the time-of-day limit above,
+so the model can recognise when to ask rather than answer.
 
 ## Known limitations
 

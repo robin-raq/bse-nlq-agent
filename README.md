@@ -51,4 +51,4 @@ Commands will be added when the application is implemented and verified from a c
 - Money will be stored as integer cents, and relative dates will be resolved from an explicit as-of date.
 - Evaluation will compare executed results with reference queries rather than matching SQL strings.
 
-Detailed design notes are available in [`ARCHITECTURE.md`](ARCHITECTURE.md). AI assistance is disclosed in [`AI_USAGE.md`](AI_USAGE.md).
+Detailed design notes are available in [`ARCHITECTURE.md`](ARCHITECTURE.md). The database design is specified in [`docs/planning/schema-design.md`](docs/planning/schema-design.md), with an entity-relationship diagram in [`docs/diagrams/schema-erd.md`](docs/diagrams/schema-erd.md). AI assistance is disclosed in [`AI_USAGE.md`](AI_USAGE.md).

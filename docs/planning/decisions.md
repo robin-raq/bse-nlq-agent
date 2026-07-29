@@ -64,13 +64,42 @@ Full contract in [`schema-design.md`](schema-design.md).
   dimensionless value with a `_bp` alias may display as basis points; anything
   else is unknown and returned raw. Rounding is integer-only `(2a + b) / (2b)` to
   keep results exactly comparable in cents.
-- A bare "sold out" question is ambiguous and requires clarification between
-  `tickets_sold >= capacity` (ever) and `tickets_net >= capacity` (currently).
-  The seed makes these disagree so a silent choice is detectable.
+- Four question shapes are ambiguous by contract and must reach
+  `clarification_required`; no default may be chosen silently:
+  **bare revenue** (gross vs net after refunds), **"best event"** (metric, plus a
+  period when none is given), **"how are sales doing"** (metric, period, and
+  baseline when a trend judgment is requested), and **"sold out"**
+  (`tickets_sold >= capacity` ever vs `tickets_net >= capacity` currently). The
+  seed makes the sold-out readings disagree so a silent choice is detectable.
+- `as_of` is a date and carries no time of day, so questions depending on the
+  current moment within that day — "has tonight's show started?", "what is
+  happening right now?" — are `unsupported_question`. No midnight or
+  end-of-day convention is invented, since any such convention would return a
+  confident wrong answer instead of an honest refusal.
+- The two refund measures are independent: `refunded_qty` governs `tickets_net`
+  and `refund_amount_cents` governs net revenue. Neither is derived from the
+  other and no proportionality constraint connects them — a returned
+  complimentary ticket has positive quantity and zero amount. Their aggregate
+  upper bounds are enforced by I-1 and I-2, in addition to the ordinary row-level
+  DDL constraints on each refund record. There is no proportional-refund
+  invariant.
+- Metadata must state that `venues.capacity` is the physical maximum while
+  `events.capacity` is the released capacity used for sold-out calculations, and
+  that `tier_name` is unique only within an event, so grouping by it across
+  events combines distinct offerings.
 - Cross-table invariants are enforced in seed logic and tests, not triggers: the
   database is written once and read-only thereafter, so a trigger could only fire
   where seed logic already runs. `tickets_sold <= events.capacity` is asserted as
   `<=`; the seed includes an event exactly at capacity.
+- I-6 is stated as two equalities over completed-order lines of a cancelled
+  event: refunded quantity equals the line's quantity **and** refunded amount
+  equals its gross. Both are needed because the measures are independent, and the
+  pair holds for complimentary lines where a full refund of zero money is
+  correct. Cancelled-order lines are excluded, having never contributed to gross.
+- Exact seed literals — identifiers, event names, order references, purchase
+  timestamps, and order-to-line packing — are frozen in
+  [`seed-manifest.md`](seed-manifest.md), separate from the design contract so
+  the seed module has one unambiguous source.
 - Semantic metadata is JSON, parsed with the standard library, and must not
   restate types, primary keys, or foreign keys.
 

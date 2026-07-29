@@ -6,9 +6,13 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-Prerequisites, project scaffolding, and the schema design are complete. The next phase is implementing the physical SQLite schema, deterministic seed data, and semantic metadata against the approved contract in `docs/planning/schema-design.md`.
+The schema and dataset contracts are complete, and the entity-relationship diagram is prepared. The next implementation step is test-first SQLite DDL.
+
+Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD).
 
 No application feature path exists yet: a user cannot submit a question, generate SQL, or query a database. No schema, seed, or database file exists.
+
+**Anchor values are document-level, hand-computed expectations. No anchor has been verified against a real seeded database.** The reconciliation arithmetic has been cross-checked between documents only; that is not database verification.
 
 ## Completed work
 
@@ -21,6 +25,7 @@ No application feature path exists yet: a user cannot submit a question, generat
 - OpenAI and Groq endpoints were smoke-tested for authentication, model access, strict response-shape compatibility, and local `ModelDecision` invariants.
 - Reviewer and agent documentation was consolidated to remove duplicated planning history.
 - The schema and seed design was worked through and approved: six tables, revenue and refund formulas, ticket-count metrics, attendance model, timestamp convention, unit and rounding rules, a 109-row deterministic seed with reconciliation totals, and 14 development anchors. Recorded in `docs/planning/schema-design.md` and `docs/planning/decisions.md`.
+- Ambiguity policy, time-of-day limits, refund-measure independence, and an executable I-6 were frozen after independent review. Exact seed literals were completed in `docs/planning/seed-manifest.md`, and an ERD was added at `docs/diagrams/schema-erd.md`.
 
 ## Verified state
 
@@ -40,8 +45,8 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 Implement the data foundation as one reviewable phase:
 
-1. Schema DDL: six STRICT tables, CHECK domains, generated columns, foreign keys, and indexes.
-2. Deterministic seed data module and loader producing the specified 109 rows.
+1. Test-first SQLite DDL: six STRICT tables, CHECK domains, generated columns, foreign keys, and indexes.
+2. Deterministic seed data module and loader reproducing the 109 rows in `docs/planning/seed-manifest.md`.
 3. Invariant assertions I-1 through I-8, with I-8 asserted as `<=`.
 4. Reconciliation tests for the overall, channel, venue, and category totals.
 5. Anchor verification: execute all 14 anchors and assert their expected results, including A14's empty result.

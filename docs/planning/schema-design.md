@@ -1,7 +1,12 @@
 # Schema and Seed Design
 
 > Approved implementation contract for the physical SQLite schema, deterministic
-> seed, and semantic metadata. Frozen 2026-07-29; not yet implemented.
+> seed, and semantic metadata. Frozen 2026-07-29.
+>
+> Physical DDL is implemented through `apply_schema` in `src/bse_nlq/db/schema.py`.
+> Deterministic seed loading and the semantic metadata sidecar are still pending.
+> Anchor results remain hand-computed and unverified against an actual seeded
+> database.
 >
 > Rationale and rejected alternatives are not repeated here. `decisions.md` owns
 > the decision record; `ARCHITECTURE.md` owns the system contract.
@@ -113,10 +118,17 @@ Table-level: `UNIQUE(order_id, tier_id)`.
 
 ### Date CHECK form — required
 
-All four date/timestamp CHECKs use `IS`, never `=`. With `=`, `strftime` returns
-NULL for malformed input, `d = NULL` evaluates to NULL, and SQLite treats NULL as
-a passing CHECK — so `'not-a-date'` is silently accepted. Verified: the `IS` form
-rejects `'not-a-date'`, `'2026-02-30'`, `'2026-2-14'`, `''`, and a trailing `Z`.
+There are exactly three explicit timestamp CHECKs — `events.start_local`,
+`orders.purchased_at`, and `refunds.refunded_at` — and all three use `IS`,
+never `=`. With `=`, `strftime` returns NULL for malformed input, `d = NULL`
+evaluates to NULL, and SQLite treats NULL as a passing CHECK — so
+`'not-a-date'` is silently accepted. Verified: the `IS` form rejects
+`'not-a-date'`, `'2026-02-30'`, `'2026-2-14'`, `''`, and a trailing `Z`.
+
+`events.event_date` is not a fourth CHECK. It is a `GENERATED ALWAYS AS
+(date(start_local)) STORED` column derived from the already-validated
+`start_local`, so it inherits that column's validity rather than needing an
+independent CHECK of its own.
 
 SQLite also *accepts* `date('now')` inside a CHECK. A test must assert the schema
 DDL contains no `now`, `CURRENT_DATE`, `CURRENT_TIME`, `CURRENT_TIMESTAMP`, or

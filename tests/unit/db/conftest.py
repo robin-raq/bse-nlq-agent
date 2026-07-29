@@ -54,6 +54,15 @@ def connection(raw_connection: sqlite3.Connection) -> sqlite3.Connection:
 
 
 @pytest.fixture
+def seeded_connection(connection: sqlite3.Connection) -> sqlite3.Connection:
+    """Schema applied and the frozen 109-row seed loaded."""
+    from bse_nlq.db.seed import load_seed_data
+
+    load_seed_data(connection)
+    return connection
+
+
+@pytest.fixture
 def seeded_venue(connection: sqlite3.Connection) -> sqlite3.Connection:
     """A connection with one valid venue row, for FK-parent fixtures."""
     connection.execute(

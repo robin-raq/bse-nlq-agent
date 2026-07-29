@@ -4,9 +4,11 @@
 > seed, and semantic metadata. Frozen 2026-07-29.
 >
 > Physical DDL is implemented through `apply_schema` in `src/bse_nlq/db/schema.py`.
-> Deterministic seed loading and the semantic metadata sidecar are still pending.
-> Anchor results remain hand-computed and unverified against an actual seeded
-> database.
+> Deterministic seed loading is implemented through `load_seed_data` in
+> `src/bse_nlq/db/seed.py` (literals in `seed_data.py`). All 14 development
+> anchors, I-1 through I-8, and the published reconciliations have been executed
+> successfully against the seeded in-memory database. The semantic metadata
+> sidecar and persistent application database artifact remain pending.
 >
 > Rationale and rejected alternatives are not repeated here. `decisions.md` owns
 > the decision record; `ARCHITECTURE.md` owns the system contract.
@@ -555,8 +557,10 @@ adding schema surface to introspection and prompt context.
 ## Development anchors
 
 14 anchors. A1–A12 are answerable directly; A13–A14 are answerable only after the
-sold-out clarification. Expected values are hand-computed from the seed and
-become verified when executed in step 6.
+sold-out clarification. Expected values were originally hand-computed from the
+seed and are now database-verified: all 14 reference queries execute
+successfully against the seeded in-memory database (A13 returns E11 only; A14
+returns zero rows).
 
 These are **development** artifacts and must be disjoint from the locked holdout
 manifest.
@@ -718,23 +722,18 @@ so the model can recognise when to ask rather than answer.
 
 ## Implementation sequence
 
-1. **Schema DDL** — six `CREATE TABLE ... STRICT` statements, CHECKs, indexes.
-   Test: fresh in-memory apply; `PRAGMA foreign_keys` on; every CHECK rejects a
-   crafted bad row, especially malformed dates; DDL text is clock-free.
-2. **Seed data module** — declarative Python literals, no randomness, stable IDs.
-   Test: identical bytes across two runs.
-3. **Seed loader** — build from schema + data. Test: `PRAGMA foreign_key_check`
-   empty; row counts match 4/14/36/20/28/7.
-4. **Invariant assertions** — I-1…I-8 as named queries, I-8 as `<=`. Test: zero
-   violations; each fails on a corrupted fixture.
-5. **Reconciliation tests** — the four totals groupings above.
-6. **Anchor verification** — execute all 14 anchors, including A14's empty
-   result. This converts the hand-computed expectations to verified.
-7. **Metadata sidecar** — JSON per the contract. Test: resolves against
+1. **Schema DDL** — complete (`apply_schema`).
+2. **Seed data module** — complete (frozen literals in `seed_data.py`).
+3. **Seed loader** — complete (`load_seed_data`; 109 rows; FK check empty).
+4. **Invariant assertions** — complete (I-1…I-8 zero violations on the seed).
+5. **Reconciliation tests** — complete (overall, channel, venue, category).
+6. **Anchor verification** — complete (A1–A14 executed; A13 = E11 only;
+   A14 = empty). Hand-computed expectations are now database-verified.
+7. **Metadata sidecar** — pending. JSON per the contract. Test: resolves against
    introspection; restates no schema-owned fact.
-8. **Full gate** — Ruff, mypy, pytest, `uv lock --check`, secret scan.
+8. **Full gate** — Ruff, mypy, pytest, `uv lock --check`, secret scan (rerun
+   after each remaining step).
 9. **Documentation reconciliation** — update `PROJECT_STATUS.md`; extend
    `decisions.md` only if a decision changes.
 
-Anchor expectations are asserted before the seed loader is considered complete,
-so a seed producing different totals fails rather than silently redefining truth.
+A seed producing different totals fails rather than silently redefining truth.

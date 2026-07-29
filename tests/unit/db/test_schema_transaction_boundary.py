@@ -182,3 +182,66 @@ def test_schema_owned_failure_rolls_back_partial_ddl(
     monkeypatch.undo()
     apply_schema(raw_connection)
     assert _application_tables(raw_connection) == APPLICATION_TABLES
+
+
+class _InterruptLike(BaseException):
+    """Deterministic BaseException stand-in for interrupt-style failures."""
+
+
+class _BoomAfterVenuesConnection:
+    """Proxy that fails after creating venues inside executescript."""
+
+    def __init__(self, real: sqlite3.Connection, exc: BaseException) -> None:
+        self._real = real
+        self._exc = exc
+
+    def executescript(self, _sql: str) -> None:
+        self._real.execute("BEGIN")
+        self._real.execute(
+            "CREATE TABLE venues ("
+            "venue_id INTEGER PRIMARY KEY, "
+            "name TEXT NOT NULL UNIQUE CHECK (length(name) > 0), "
+            "district TEXT NOT NULL CHECK (length(district) > 0), "
+            "capacity INTEGER NOT NULL CHECK (capacity > 0)"
+            ") STRICT"
+        )
+        raise self._exc
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._real, name)
+
+
+def test_non_sqlite_exception_rolls_back_partial_schema(
+    raw_connection: sqlite3.Connection,
+) -> None:
+    """A non-SQLite failure after the schema txn begins must not leave objects."""
+    proxy = _BoomAfterVenuesConnection(
+        raw_connection, RuntimeError("schema boom after venues")
+    )
+
+    with pytest.raises(RuntimeError, match="schema boom after venues"):
+        apply_schema(proxy)  # type: ignore[arg-type]
+
+    assert raw_connection.in_transaction is False
+    assert _application_tables(raw_connection) == set()
+    assert raw_connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
+
+    apply_schema(raw_connection)
+    assert _application_tables(raw_connection) == APPLICATION_TABLES
+
+
+def test_baseexception_rolls_back_partial_schema(
+    raw_connection: sqlite3.Connection,
+) -> None:
+    proxy = _BoomAfterVenuesConnection(
+        raw_connection, _InterruptLike("schema interrupt after venues")
+    )
+
+    with pytest.raises(_InterruptLike, match="schema interrupt after venues"):
+        apply_schema(proxy)  # type: ignore[arg-type]
+
+    assert raw_connection.in_transaction is False
+    assert _application_tables(raw_connection) == set()
+
+    apply_schema(raw_connection)
+    assert _application_tables(raw_connection) == APPLICATION_TABLES

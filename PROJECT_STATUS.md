@@ -6,13 +6,13 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-The SQLite physical schema is implemented and test-first verified against the frozen contract in `docs/planning/schema-design.md`. The next implementation step is the deterministic seed data module and loader.
+The SQLite physical schema and the deterministic 109-row seed are implemented and test-first verified against the frozen contracts in `docs/planning/schema-design.md` and `docs/planning/seed-manifest.md`. The next implementation step is the JSON semantic metadata sidecar (then a persistent application database artifact and build/distribution commands).
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD).
 
-No application feature path exists yet: a user cannot submit a question, generate SQL, or query a database. No seed data, metadata sidecar, or persistent database file exists.
+No application feature path exists yet: a user cannot submit a question, generate SQL, or query through a service/CLI. No metadata sidecar or persistent database file exists.
 
-**Anchor values are document-level, hand-computed expectations. No anchor has been verified against a real seeded database.** The reconciliation arithmetic has been cross-checked between documents only; that is not database verification.
+**All 14 development anchors have been executed successfully against the real seeded in-memory database.** A13 returns E11 only; A14 returns zero rows. Invariants I-1 through I-8 and the published reconciliations pass against that seed. This does not claim model-generated SQL or application query-execution services have been tested.
 
 ## Completed work
 
@@ -26,7 +26,8 @@ No application feature path exists yet: a user cannot submit a question, generat
 - Reviewer and agent documentation was consolidated to remove duplicated planning history.
 - The schema and seed design was worked through and approved: six tables, revenue and refund formulas, ticket-count metrics, attendance model, timestamp convention, unit and rounding rules, a 109-row deterministic seed with reconciliation totals, and 14 development anchors. Recorded in `docs/planning/schema-design.md` and `docs/planning/decisions.md`.
 - Ambiguity policy, time-of-day limits, refund-measure independence, and an executable I-6 were frozen after independent review. Exact seed literals were completed in `docs/planning/seed-manifest.md`, and an ERD was added at `docs/diagrams/schema-erd.md`.
-- The SQLite physical schema was implemented test-first at `src/bse_nlq/db/schema.py`: six `STRICT` tables, all approved `CHECK` domains and numeric constraints, the two `STORED` generated columns (`events.event_date`, `order_items.line_gross_cents`), all foreign keys with `ON UPDATE RESTRICT ON DELETE RESTRICT`, and the ten approved indexes. The public API is `apply_schema(connection: sqlite3.Connection) -> None`, which enables and verifies `PRAGMA foreign_keys`, applies the DDL atomically to a caller-supplied connection, rejects an already-active caller transaction without committing or rolling it back, and rolls back schema-owned failures so no transaction remains open. No seeding, database factory, or query execution exists in this module.
+- The SQLite physical schema was implemented test-first at `src/bse_nlq/db/schema.py`: six `STRICT` tables, all approved `CHECK` domains and numeric constraints, the two `STORED` generated columns (`events.event_date`, `order_items.line_gross_cents`), all foreign keys with `ON UPDATE RESTRICT ON DELETE RESTRICT`, and the ten approved indexes. The public API is `apply_schema(connection: sqlite3.Connection) -> None`.
+- The deterministic seed was implemented test-first at `src/bse_nlq/db/seed.py` and `src/bse_nlq/db/seed_data.py`. The public API is `load_seed_data(connection: sqlite3.Connection) -> None`. It inserts exactly the manifest literals (4 + 14 + 36 + 20 + 28 + 7 = 109 rows) into a caller-supplied connection after schema application, never calls `apply_schema`, rejects an already-active caller transaction, verifies `PRAGMA foreign_keys`, inserts atomically, rolls back on any escaping exception after its transaction begins (including non-`sqlite3.Error`), and leaves no open transaction on success or failure. `apply_schema` uses the same BaseException cleanup contract.
 
 ## Verified state
 
@@ -36,28 +37,25 @@ No application feature path exists yet: a user cannot submit a question, generat
 | Package | `bse_nlq` imports from the installed environment |
 | Toolchain | Ruff formatting and linting, mypy, pytest, and `uv lock --check` passed after scaffolding |
 | SQLite | STRICT enforcement, foreign keys, read-only URI, `query_only`, authorizer denial, and progress interruption behaved as required in isolated probes |
-| Schema DDL | 173 focused contract tests pass against a fresh in-memory connection: object inventory, per-column contracts, foreign keys and `foreign_key_check`, domain/numeric/attendance/date CHECKs (including a static null-safe `IS strftime` DDL guard and CHECK-source assertions for `events.start_local`), generated-column behavior, uniqueness, exact approved-index inventory, static DDL clock-safety, I-1–I-8 enforcement-boundary documentation, and caller-owned / schema-owned transaction-boundary behavior. Full suite (174 tests including the pre-existing package-import test), Ruff lint and format, mypy strict, and `uv lock --check` all pass. Caller-owned open transactions are rejected without mutation; schema-owned failures roll back cleanly; foreign keys remain enabled and verified after success and failure. Seed data remains unimplemented; anchors remain unverified against a real seeded database |
+| Schema DDL | Contract tests pass against a fresh in-memory connection: object inventory, per-column contracts, foreign keys and `foreign_key_check`, domain/numeric/attendance/date CHECKs (including a static null-safe `IS strftime` DDL guard), generated-column behavior, uniqueness, exact approved-index inventory, static DDL clock-safety, I-1–I-8 enforcement-boundary documentation, and caller-owned / schema-owned transaction-boundary behavior |
+| Seed data | Exact table counts 4/14/36/20/28/7 (109 total); primary-key and foreign-key integrity; domain inventories; generated `event_date` and `line_gross_cents`; nine unsold tiers; transaction success/rejection/second-load/mid-load/non-SQLite/`BaseException` failure contracts; FK-disabled rejection. I-1 through I-8 return zero violations on the complete seed; E11 equality uses completed-order grain with a cancelled-order regression. Overall reconciliation: gross 7,270,000 · refunded 810,000 · net 6,460,000 · tickets_sold 957 using completed-order refund filtering; channel/venue/category groupings and January 2026 purchase gross 2,000,000 match the published contract; cancelled-order refunds are excluded from refunded/net/A9; E5 direct-join fan-out regression passes. All 14 anchors execute with expected rows, columns, values, and ordering (A13 = E11 only; A14 = empty). Independent SHA-256 fingerprints pin `seed_data` tuples to the tracked manifest. Analytical trap regressions cover face vs unit price, gross vs net, refund fan-out, weighted average, capacities, E11 sold vs net, date fields, cancelled orders, attendance, and tier identity |
+| Suite | 60 seed-focused tests (`test_seed_*.py`); 235 tests under `tests/unit/db`; 236 full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; secret-pattern scan clean on tracked and seed paths |
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
 | Secrets | Credentials and the private exercise document remain untracked |
 
-Provider checks establish endpoint eligibility only. They do not establish SQL quality, comparative performance, or final model selection. SQLite probes establish runtime capabilities, not an implemented application safety boundary.
+Provider checks establish endpoint eligibility only. They do not establish SQL quality, comparative performance, or final model selection. Seed and anchor verification establish dataset correctness only; they do not establish model-generated SQL quality or an application query service.
 
 ## Immediate next objective
 
-Continue the data foundation as one reviewable phase. Test-first SQLite DDL (six STRICT tables, CHECK domains, generated columns, foreign keys, indexes) is complete; remaining steps:
+Continue the data foundation. Schema DDL and deterministic seed loading are complete; remaining steps:
 
-1. Deterministic seed data module and loader reproducing the 109 rows in `docs/planning/seed-manifest.md`.
-2. Invariant assertions I-1 through I-8, with I-8 asserted as `<=`.
-3. Reconciliation tests for the overall, channel, venue, and category totals.
-4. Anchor verification: execute all 14 anchors and assert their expected results, including A14's empty result.
-5. JSON semantic metadata sidecar, asserted against introspection and duplicating no schema-owned fact.
-6. Run the full formatting, linting, typing, test, lockfile, and secret checks.
-7. Reconcile `PROJECT_STATUS.md` with verified outcomes and update `AI_USAGE.md` only if this phase materially changes the reviewer-facing AI disclosure.
+1. JSON semantic metadata sidecar, asserted against introspection and duplicating no schema-owned fact.
+2. Persistent application database artifact and any approved build/distribution commands (still pending).
+3. Run the full formatting, linting, typing, test, lockfile, and secret checks after that work.
+4. Reconcile `PROJECT_STATUS.md` with verified outcomes and update `AI_USAGE.md` only if the phase materially changes the reviewer-facing AI disclosure.
 
-Anchor expected results are hand-computed and remain unverified until step 4 executes them.
-
-Do not begin provider integration, prompt iteration, or model-generated SQL execution during this phase.
+Do not begin provider integration, prompt iteration, or model-generated SQL execution during the remaining data-foundation work.
 
 ## Subsequent sequence
 
@@ -92,6 +90,6 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Seed data, semantic metadata, application database factory, SQL policy, provider adapters, service, result formatting, CLI, integration and safety suites, evaluation cases, evaluation results, and final model selection.
+Semantic metadata, application database factory / persistent database file, SQL policy, provider adapters, service, result formatting, CLI, integration and safety suites, evaluation cases, evaluation results, and final model selection.
 
-The physical schema DDL and its `apply_schema` API are implemented and test-verified (see Verified state). No seed code, metadata file, or persistent database file exists.
+The physical schema DDL (`apply_schema`) and deterministic seed loader (`load_seed_data`) are implemented and test-verified (see Verified state). No metadata file or persistent database file exists.

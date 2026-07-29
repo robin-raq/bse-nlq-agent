@@ -108,12 +108,13 @@ def apply_schema(connection: sqlite3.Connection) -> None:
     open transaction into its own.
 
     Enables and verifies foreign-key enforcement outside the schema
-    transaction, then executes the frozen DDL as one transaction. On
-    failure, the schema transaction is rolled back and the underlying
-    SQLite error is re-raised. The connection is left with no open
-    transaction on both success and failure. The caller owns the
-    connection's lifecycle; this function opens nothing, seeds nothing, and
-    reads no clock.
+    transaction, then executes the frozen DDL as one transaction. On any
+    failure after the schema transaction begins — including
+    non-``sqlite3.Error`` exceptions — the schema transaction is rolled
+    back and the original exception is re-raised. The connection is left
+    with no open transaction on both success and failure. The caller owns
+    the connection's lifecycle; this function opens nothing, seeds nothing,
+    and reads no clock.
     """
     if connection.in_transaction:
         raise sqlite3.ProgrammingError(
@@ -127,7 +128,7 @@ def apply_schema(connection: sqlite3.Connection) -> None:
 
     try:
         connection.executescript(_SCHEMA_SQL)
-    except sqlite3.Error:
+    except BaseException:
         if connection.in_transaction:
             connection.rollback()
         raise

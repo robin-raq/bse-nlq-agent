@@ -6,9 +6,11 @@
 > Column semantics, CHECK domains, and business definitions live in
 > [`schema-design.md`](schema-design.md); this file carries only the values.
 >
-> **Nothing here has been executed against a database.** Every total is
-> hand-computed from these literals and stays unverified until the seed is built
-> and the anchors run.
+> Literals are transcribed into `src/bse_nlq/db/seed_data.py` and loaded by
+> `load_seed_data`. Row counts, reconciliations, invariants I-1–I-8, and all 14
+> development anchors have been executed successfully against the seeded
+> in-memory database. This Markdown file remains the human-readable authority;
+> production code does not parse it at runtime.
 
 Row counts: `venues` 4 · `events` 14 · `ticket_tiers` 36 · `orders` 20 ·
 `order_items` 28 · `refunds` 7 — **109 rows**.
@@ -189,7 +191,8 @@ a naive refund join. Every `refunded_at` follows its order's `purchased_at`
 
 ## Reconciliation
 
-Hand-computed from the literals above.
+Originally hand-computed from the literals above; now also verified by
+independent SQL against the seeded database.
 
 | Measure | Value |
 |---|---|

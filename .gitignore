@@ -24,6 +24,7 @@ dist/
 # Editors and OS
 .vscode/
 .idea/
+.cursor/
 .DS_Store
 
 # Local databases (generated from the deterministic seed script, never committed)

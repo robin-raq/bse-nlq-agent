@@ -16,6 +16,9 @@
 | D-010 | Development set plus locked holdout; result-equivalence scoring | Allows prompt iteration without tuning on final cases and accepts semantically equivalent SQL. |
 | D-011 | Standard-library JSONL logging to stderr | Preserves clean JSON stdout without adding a hosted observability stack. |
 | D-012 | One `src/bse_nlq/` package | Avoids speculative packages and working-directory import mistakes. |
+| D-013 | Six-table schema: `venues`, `events`, `ticket_tiers`, `orders`, `order_items`, `refunds` | Normalizes list price to the tier so pricing questions have a source of truth, and keeps category a CHECK domain rather than a lookup table. The `order_items → ticket_tiers → events` hop is retained deliberately: it gives the join evaluation slice real depth. |
+| D-014 | Revenue uses actual paid price; fees are not modeled | `unit_price_cents` is the only price input; `face_value_cents` is descriptive list price. One revenue definition, no fee-inclusion ambiguity. |
+| D-015 | Deterministic 109-row seed with published reconciliation totals | Small enough to audit by hand, since every evaluation number inherits the seed's correctness. |
 
 ## Frozen contracts
 
@@ -30,7 +33,46 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
 - Physical tables checked against introspection; CTE and derived names handled separately.
 - No SQL rewriting: executed SQL equals generated SQL byte for byte.
 - Read-only URI, `query_only`, default-deny authorizer, progress budget, and fetch cap.
+- Authorizer actions use an explicit action-code mapping, never a reverse lookup over `sqlite3` constants. Numeric values repeat across namespaces: action code 19 is `SQLITE_PRAGMA`, while the unrelated result code `SQLITE_CONSTRAINT` is also 19.
 - Unit/alias contradictions rejected before execution; unknown units remain unformatted.
+
+### Schema and dataset
+
+Full contract in [`schema-design.md`](schema-design.md).
+
+- STRICT tables; integer cents; foreign keys enforced and asserted.
+- Event status: `scheduled`, `completed`, `cancelled`. Order status: exactly
+  `completed` and `cancelled` — `pending` and `failed` add no required analytics
+  capability and would add schema, metadata, seed, and query complexity.
+- Gross revenue sums `unit_price_cents * quantity` over completed orders; net
+  subtracts refunds **pre-aggregated per line item**, since a flat refund join
+  multiplies gross by the refund count.
+- `tickets_sold` and `tickets_net` are distinct named metrics.
+- Cancelled orders are excluded from all metrics; cancelled events remain in
+  gross and are zeroed in net by their refunds.
+- Attendance is nullable on `events`, present only for completed events, bounded
+  by event capacity. It is a turnstile fact, not derived from ticket sales.
+- Timestamps are America/New_York business-local wall-clock, `YYYY-MM-DDTHH:MM:SS`,
+  no offset. Default `as_of` is 2026-03-15. `upcoming` is
+  `event_date >= as_of AND status = 'scheduled'`: `as_of` carries no time of day,
+  so a strict comparison would drop a same-day event that has not happened.
+- Date CHECKs use `IS strftime(...)`, never `=`. With `=`, `strftime` returns
+  NULL on malformed input and SQLite treats the NULL result as passing, silently
+  accepting invalid dates.
+- Division units are closed: cents/count → `cents_per_item`; count/count →
+  dimensionless; dimensionless × scale stays dimensionless; a proven
+  dimensionless value with a `_bp` alias may display as basis points; anything
+  else is unknown and returned raw. Rounding is integer-only `(2a + b) / (2b)` to
+  keep results exactly comparable in cents.
+- A bare "sold out" question is ambiguous and requires clarification between
+  `tickets_sold >= capacity` (ever) and `tickets_net >= capacity` (currently).
+  The seed makes these disagree so a silent choice is detectable.
+- Cross-table invariants are enforced in seed logic and tests, not triggers: the
+  database is written once and read-only thereafter, so a trigger could only fire
+  where seed logic already runs. `tickets_sold <= events.capacity` is asserted as
+  `<=`; the seed includes an event exactly at capacity.
+- Semantic metadata is JSON, parsed with the standard library, and must not
+  restate types, primary keys, or foreign keys.
 
 ### Evaluation gate
 

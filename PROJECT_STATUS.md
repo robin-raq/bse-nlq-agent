@@ -1,14 +1,14 @@
 # Project Status
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 This is the operational handoff for coding agents. Read it before starting work to understand the verified repository state, the next implementation objective, and active constraints. Architecture authority remains in `docs/planning/decisions.md` and `ARCHITECTURE.md`.
 
 ## Current phase
 
-Prerequisites and project scaffolding are complete. The next phase is the physical SQLite schema, deterministic seed data, and semantic metadata.
+Prerequisites, project scaffolding, and the schema design are complete. The next phase is implementing the physical SQLite schema, deterministic seed data, and semantic metadata against the approved contract in `docs/planning/schema-design.md`.
 
-No application feature path exists yet: a user cannot submit a question, generate SQL, or query a database.
+No application feature path exists yet: a user cannot submit a question, generate SQL, or query a database. No schema, seed, or database file exists.
 
 ## Completed work
 
@@ -20,6 +20,7 @@ No application feature path exists yet: a user cannot submit a question, generat
 - SQLite capabilities required by the design were behaviorally checked in the pinned runtime.
 - OpenAI and Groq endpoints were smoke-tested for authentication, model access, strict response-shape compatibility, and local `ModelDecision` invariants.
 - Reviewer and agent documentation was consolidated to remove duplicated planning history.
+- The schema and seed design was worked through and approved: six tables, revenue and refund formulas, ticket-count metrics, attendance model, timestamp convention, unit and rounding rules, a 109-row deterministic seed with reconciliation totals, and 14 development anchors. Recorded in `docs/planning/schema-design.md` and `docs/planning/decisions.md`.
 
 ## Verified state
 
@@ -39,13 +40,16 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 Implement the data foundation as one reviewable phase:
 
-1. Define the minimal BSE-flavored event, category, ticket, order, and refund relationships needed by the planned query set.
-2. Encode keys, nullability, status domains, quantities, and integer-cent monetary constraints in SQLite.
-3. Add a deterministic seed that covers joins, grouping, date ranges, ranking, revenue, refunds, cancellations, zero-value tickets, and an empty-result case.
-4. Add semantic metadata for business meanings, units, synonyms, visibility, and canonical revenue rules without duplicating schema-owned facts.
-5. Add tests proving repeatable generation, constraint enforcement, foreign-key integrity, and metadata coverage.
-6. Run the full formatting, linting, typing, test, lockfile, and secret checks.
-7. Update this file and `AI_USAGE.md` with verified outcomes before beginning the connection factory.
+1. Schema DDL: six STRICT tables, CHECK domains, generated columns, foreign keys, and indexes.
+2. Deterministic seed data module and loader producing the specified 109 rows.
+3. Invariant assertions I-1 through I-8, with I-8 asserted as `<=`.
+4. Reconciliation tests for the overall, channel, venue, and category totals.
+5. Anchor verification: execute all 14 anchors and assert their expected results, including A14's empty result.
+6. JSON semantic metadata sidecar, asserted against introspection and duplicating no schema-owned fact.
+7. Run the full formatting, linting, typing, test, lockfile, and secret checks.
+8. Reconcile `PROJECT_STATUS.md` with verified outcomes and update `AI_USAGE.md` only if this phase materially changes the reviewer-facing AI disclosure.
+
+Anchor expected results are hand-computed and remain unverified until step 5 executes them.
 
 Do not begin provider integration, prompt iteration, or model-generated SQL execution during this phase.
 
@@ -83,3 +87,5 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 ## Not yet implemented
 
 Physical schema, seed data, semantic metadata, application database factory, SQL policy, provider adapters, service, result formatting, CLI, integration and safety suites, evaluation cases, evaluation results, and final model selection.
+
+The schema design is approved but no DDL, seed code, metadata file, or database exists.

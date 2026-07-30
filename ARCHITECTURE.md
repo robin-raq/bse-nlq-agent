@@ -1,6 +1,8 @@
 # Architecture
 
-> Approved target design; implementation is pending.
+> Approved target design. Schema, seed, semantic metadata, ModelDecision
+> validation, and deterministic prompt construction are implemented; provider
+> adapters, SQL policy, execution, and the CLI remain pending.
 
 ## Principles
 
@@ -32,7 +34,9 @@ Projection-unit analysis occurs before execution. The application never rewrites
 | Service | Orchestration and terminal-state mapping |
 | Dates | Strict `as_of` validation and half-open ranges |
 | Schema context | Introspection plus curated business metadata |
-| Provider adapter | Prompt submission and response normalization |
+| Prompt | Deterministic `build_prompt(PromptInput) -> BuiltPrompt` |
+| Decision | Strict `parse_model_decision_json` / `validate_model_decision` |
+| Provider adapter | Prompt submission and response normalization (pending) |
 | SQL policy | Parsing, structural validation, and unit inference |
 | Database | Seeding, read-only connections, authorizer, and limits |
 | Formatting | Human and JSON output from executed values |
@@ -40,9 +44,17 @@ Projection-unit analysis occurs before execution. The application never rewrites
 
 All implementation lives in the single `src/bse_nlq/` package. Modules should be created only when they contain real behavior.
 
+Implemented module paths for this phase:
+
+- `bse_nlq.db` — `apply_schema`, `load_seed_data`
+- `bse_nlq.metadata` — `load_semantic_metadata`
+- `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
+- `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
+- `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
+
 ## Model contract
 
-`QueryGenerator.generate(QueryRequest) -> ModelDecision` isolates provider code from the deterministic core.
+`QueryGenerator.generate(QueryRequest) -> ModelDecision` isolates provider code from the deterministic core. Offline tests use `decide_from_raw_generator(RawModelGenerator, BuiltPrompt) -> ModelDecision` so prompt construction and decision parsing can be exercised without a provider.
 
 `ModelDecision` has four required fields and rejects additional properties:
 
@@ -53,7 +65,15 @@ All implementation lives in the single `src/bse_nlq/` package. Modules should be
 | `clarification` | string or null |
 | `explanation` | string or null |
 
-Local validation enforces the allowed null/non-null combination for each status. Provider schema enforcement constrains response shape, not SQL safety or correctness.
+Local validation enforces the allowed null/non-null combination for each status:
+
+- `sql_generated` → nonempty `sql`; `clarification` and `explanation` null
+- `clarification_required` → nonempty `clarification`; `sql` and `explanation` null
+- `unsupported` → nonempty `explanation`; `sql` and `clarification` null
+
+Malformed or contradictory envelopes raise `InvalidModelOutputError`, which maps to the `invalid_model_output` terminal state. Provider schema enforcement constrains response shape, not SQL safety or correctness. A deterministic JSON Schema is available from `model_decision_json_schema()` for later structured-output configuration; cross-field invariants remain application-owned.
+
+Adapter contract for raw model responses: pass the provider's response text to `parse_model_decision_json`. Do not `json.loads` and then call `validate_model_decision` for raw provider payloads—ordinary JSON decoding collapses duplicate keys before validation can reject them. Runtime code must construct `ModelDecision` through validation rather than by instantiating the dataclass directly.
 
 The MVP endpoint is GPT-5 mini through OpenAI Responses. The comparison candidate is `openai/gpt-oss-120b` through Groq Chat Completions. Both passed endpoint compatibility checks; neither has been evaluated for SQL quality.
 
@@ -76,11 +96,11 @@ Each layer must be tested independently. Rejected SQL exposes `generated_sql` bu
 
 The dataset will be synthetic, BSE-flavored ticketing data produced by a deterministic seed. SQLite owns structural facts; version-controlled semantic metadata at `src/bse_nlq/metadata/schema.json` owns meanings, units, synonyms, categories, visibility, and business definitions. The typed loader is `bse_nlq.metadata.load_semantic_metadata(connection)`, which validates the packaged JSON (including duplicate-key rejection), returns deeply frozen nested mappings, and reconciles every physical application column plus exact foreign-key join guidance against SQLite introspection without restating types, keys, or nullability.
 
-Money is stored as integer cents. Dates use ISO text and half-open ranges. Relative dates are resolved from an explicit `as_of`; machine-clock SQL is prohibited.
+Money is stored as integer cents. Dates use ISO text and half-open ranges. Relative dates are resolved from an explicit `as_of`; machine-clock SQL is prohibited. Default `as_of` is `2026-03-15` when the caller omits it.
 
 Revenue definitions must state included statuses and refund treatment. Currency formatting is applied only when a unit can be proven from the projection and trusted metadata. Unknown units remain raw; a proven alias/unit contradiction is rejected.
 
-The prompt contains stable schema context, business rules, the resolved date, and a clearly delimited user question. Raw sample rows are excluded unless evaluation later demonstrates a need.
+`build_prompt` assembles stable system instructions (application rules, introspected physical schema, semantic metadata), a clearly delimited user-question block, and the ModelDecision response schema. Raw sample rows, seed literals, reconciliation totals, and `orders.order_ref` are excluded from model-facing sections.
 
 ## Interface and states
 

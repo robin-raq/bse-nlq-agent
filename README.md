@@ -2,11 +2,13 @@
 
 A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI Engineer take-home exercise. It is designed to turn a plain-English question into SQL, validate the generated query, execute it against a read-only SQLite database, and return the result with the SQL used.
 
-> **Current status:** the physical SQLite schema and deterministic 109-row seed
-> loader are implemented and verified offline (invariants I-1–I-8 and
-> development anchors A1–A14 against an in-memory database). Semantic metadata,
-> the runtime NLQ-to-SQL pipeline, persistent database build/distribution, CLI,
-> and final evaluation remain pending. Model-generated SQL has not been tested.
+> **Current status:** the physical SQLite schema, deterministic 109-row seed
+> loader, and JSON semantic metadata sidecar are implemented and verified
+> offline (schema reconciliation against introspection; invariants I-1–I-8 and
+> development anchors A1–A14 against an in-memory database). Runtime prompt
+> construction, the NLQ-to-SQL pipeline, persistent database build/distribution,
+> CLI, and final evaluation remain pending. Model-generated SQL has not been
+> tested.
 
 
 ## Planned approach

@@ -22,6 +22,17 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bse_nlq"]
+# Hatchling's package directory walk can still pick up non-Python files; keep
+# JSON out of the default selection so packaging is fail-closed without an
+# explicit force-include of the semantic sidecar.
+exclude = [
+  "src/bse_nlq/metadata/*.json",
+]
+
+# Semantic metadata sidecar must ship with the installed package for
+# importlib.resources loading.
+[tool.hatch.build.targets.wheel.force-include]
+"src/bse_nlq/metadata/schema.json" = "bse_nlq/metadata/schema.json"
 
 [tool.ruff]
 target-version = "py313"

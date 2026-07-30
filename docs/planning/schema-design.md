@@ -8,7 +8,9 @@
 > `src/bse_nlq/db/seed.py` (literals in `seed_data.py`). All 14 development
 > anchors, I-1 through I-8, and the published reconciliations have been executed
 > successfully against the seeded in-memory database. The semantic metadata
-> sidecar and persistent application database artifact remain pending.
+> sidecar is implemented at `src/bse_nlq/metadata/schema.json` with
+> `load_semantic_metadata`. The persistent application database artifact remains
+> pending.
 >
 > Rationale and rejected alternatives are not repeated here. `decisions.md` owns
 > the decision record; `ARCHITECTURE.md` owns the system contract.
@@ -729,11 +731,13 @@ so the model can recognise when to ask rather than answer.
 5. **Reconciliation tests** — complete (overall, channel, venue, category).
 6. **Anchor verification** — complete (A1–A14 executed; A13 = E11 only;
    A14 = empty). Hand-computed expectations are now database-verified.
-7. **Metadata sidecar** — pending. JSON per the contract. Test: resolves against
-   introspection; restates no schema-owned fact.
+7. **Metadata sidecar** — complete (JSON at `src/bse_nlq/metadata/schema.json`;
+   `load_semantic_metadata`; reconciles against introspection; restates no
+   schema-owned fact).
 8. **Full gate** — Ruff, mypy, pytest, `uv lock --check`, secret scan (rerun
    after each remaining step).
 9. **Documentation reconciliation** — update `PROJECT_STATUS.md`; extend
    `decisions.md` only if a decision changes.
+10. **Persistent application database artifact** — pending.
 
 A seed producing different totals fails rather than silently redefining truth.

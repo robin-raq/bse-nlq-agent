@@ -1,0 +1,535 @@
+{
+  "version": 1,
+  "clarifications": {
+    "bare_revenue": {
+      "description": "Bare revenue or ticket revenue is ambiguous; ask which metric is intended.",
+      "options": ["gross_ticket_revenue", "net_ticket_revenue"],
+      "requires": [],
+      "silent_default_forbidden": true
+    },
+    "best_event": {
+      "description": "Best event requires an explicit ranking metric and a period when none is supplied.",
+      "options": [
+        "gross_ticket_revenue",
+        "net_ticket_revenue",
+        "tickets_sold",
+        "attendance",
+        "attendance_rate"
+      ],
+      "requires": ["metric", "period_when_absent"],
+      "silent_default_forbidden": true
+    },
+    "how_are_sales_doing": {
+      "description": "How are sales doing requires metric, period, and a comparison baseline when a trend judgment is requested.",
+      "options": [],
+      "requires": ["metric", "period", "comparison_or_baseline_when_trend"],
+      "silent_default_forbidden": true
+    },
+    "sold_out": {
+      "description": "Bare sold out is ambiguous between ever sold out and currently sold out.",
+      "options": ["ever_sold_out", "currently_sold_out"],
+      "requires": [],
+      "silent_default_forbidden": true
+    }
+  },
+  "conventions": {
+    "date_ranges": "half-open",
+    "default_as_of": "2026-03-15",
+    "notes": [
+      "Timestamps are America/New_York business-local wall-clock values with no UTC suffix or offset.",
+      "Event-performance questions usually filter by events.event_date.",
+      "Purchase questions filter by orders.purchased_at.",
+      "events.event_date and orders.purchased_at must not be interchanged.",
+      "upcoming means event_date >= as_of and status = scheduled; inclusive of the as_of date."
+    ],
+    "rounding_rule": "nonnegative_integer_round_half_up_(2a+b)/(2b)",
+    "timestamp_format": "YYYY-MM-DDTHH:MM:SS",
+    "timestamps_have_offset": false,
+    "timezone": "America/New_York",
+    "unit_rules": [
+      "cents_divided_by_count_yields_cents_per_item",
+      "count_divided_by_count_yields_dimensionless",
+      "dimensionless_times_numeric_scale_remains_dimensionless",
+      "basis_points_alias_only_after_proven_dimensionless",
+      "alias_text_alone_never_proves_a_unit",
+      "unsupported_division_yields_unknown_raw"
+    ],
+    "upcoming_inclusive_of_as_of": true,
+    "upcoming_requires_scheduled": true
+  },
+  "join_guidance": [
+    {
+      "from_column": "venue_id",
+      "from_table": "events",
+      "note": "Each event belongs to one venue.",
+      "to_column": "venue_id",
+      "to_table": "venues"
+    },
+    {
+      "from_column": "event_id",
+      "from_table": "ticket_tiers",
+      "note": "Each ticket tier belongs to one event.",
+      "to_column": "event_id",
+      "to_table": "events"
+    },
+    {
+      "from_column": "order_id",
+      "from_table": "order_items",
+      "note": "Each order item belongs to one order.",
+      "to_column": "order_id",
+      "to_table": "orders"
+    },
+    {
+      "from_column": "tier_id",
+      "from_table": "order_items",
+      "note": "Each order item references one ticket tier; join through tiers to reach events.",
+      "to_column": "tier_id",
+      "to_table": "ticket_tiers"
+    },
+    {
+      "from_column": "order_item_id",
+      "from_table": "refunds",
+      "note": "Each refund references one order item; pre-aggregate refunds by order_item_id before joining to lines.",
+      "to_column": "order_item_id",
+      "to_table": "order_items"
+    }
+  ],
+  "metrics": {
+    "attendance_rate": {
+      "description": "Completed-event attendance divided by that event's released capacity.",
+      "expression": "events.attendance / events.capacity for completed events only",
+      "filters": ["completed_events_only"],
+      "notes": [
+        "Dimensionless ratio.",
+        "Basis-point rendering allowed only with proven dimensionless semantics.",
+        "Integer basis-point rounding follows the frozen nonnegative round-half-up rule."
+      ],
+      "roles": ["dimensionless_ratio"],
+      "unit": "dimensionless"
+    },
+    "average_ticket_price": {
+      "description": "Quantity-weighted actual paid price over completed orders.",
+      "expression": "gross_ticket_revenue / tickets_sold, round half up to nearest integer cent",
+      "filters": ["completed_orders_only"],
+      "notes": [
+        "Numerator is gross ticket revenue; denominator is tickets sold.",
+        "Never use AVG(unit_price_cents).",
+        "Never use face_value_cents."
+      ],
+      "roles": ["quantity_weighted", "never_avg_unit_price", "never_face_value"],
+      "unit": "cents_per_item"
+    },
+    "currently_sold_out": {
+      "description": "Event is currently sold out when retained tickets meet or exceed released capacity.",
+      "expression": "tickets_net >= events.capacity",
+      "filters": [],
+      "notes": [
+        "Uses events.capacity, never venues.capacity.",
+        "Bare sold out requires clarification versus ever_sold_out."
+      ],
+      "roles": ["sold_out_current"],
+      "unit": "dimensionless"
+    },
+    "ever_sold_out": {
+      "description": "Event ever sold out when issued tickets meet or exceed released capacity.",
+      "expression": "tickets_sold >= events.capacity",
+      "filters": [],
+      "notes": [
+        "Uses events.capacity, never venues.capacity.",
+        "Bare sold out requires clarification versus currently_sold_out."
+      ],
+      "roles": ["sold_out_ever"],
+      "unit": "dimensionless"
+    },
+    "gross_ticket_revenue": {
+      "description": "Completed-order ticket sales before refunds, at actual paid price.",
+      "expression": "SUM(order_items.line_gross_cents) over completed orders",
+      "filters": ["completed_orders_only"],
+      "notes": [
+        "Equivalent to SUM(unit_price_cents * quantity).",
+        "Never uses face_value_cents.",
+        "Includes completed-order sales for cancelled events before refunds."
+      ],
+      "roles": ["revenue", "never_face_value"],
+      "unit": "cents"
+    },
+    "net_ticket_revenue": {
+      "description": "Gross ticket revenue minus refunded ticket revenue.",
+      "expression": "gross_ticket_revenue - refunded_ticket_revenue",
+      "filters": ["completed_orders_only", "refunds_preaggregated_by_order_item_id"],
+      "notes": [
+        "Completed-order base.",
+        "Refunds must be pre-aggregated by order_item_id before joining."
+      ],
+      "roles": ["revenue", "requires_refund_preaggregation"],
+      "unit": "cents"
+    },
+    "refunded_ticket_revenue": {
+      "description": "Refund money associated with completed-order lines.",
+      "expression": "SUM(refund_amount_cents) over refunds on completed-order lines, pre-aggregated by order_item_id",
+      "filters": ["completed_orders_only", "refunds_preaggregated_by_order_item_id"],
+      "notes": [
+        "Affects net revenue; independent of refunded_qty.",
+        "Refunds must be pre-aggregated by order_item_id before joining."
+      ],
+      "roles": ["revenue", "requires_refund_preaggregation", "independent_of_refunded_qty"],
+      "unit": "cents"
+    },
+    "tickets_net": {
+      "description": "Tickets sold minus completed-order refunded quantity.",
+      "expression": "tickets_sold - SUM(refunded_qty) over completed-order refunds pre-aggregated by order_item_id",
+      "filters": ["completed_orders_only", "refunds_preaggregated_by_order_item_id"],
+      "notes": [
+        "refunded_qty affects tickets_net; refund_amount_cents does not.",
+        "Refund quantities must be pre-aggregated by order_item_id."
+      ],
+      "roles": ["ticket_count", "requires_refund_preaggregation", "independent_of_refund_amount"],
+      "unit": "count"
+    },
+    "tickets_sold": {
+      "description": "Tickets issued on completed orders.",
+      "expression": "SUM(order_items.quantity) over completed orders",
+      "filters": ["completed_orders_only"],
+      "notes": [
+        "Cancelled orders are excluded.",
+        "Distinct from tickets_net and from attendance."
+      ],
+      "roles": ["ticket_count"],
+      "unit": "count"
+    }
+  },
+  "tables": {
+    "events": {
+      "columns": {
+        "attendance": {
+          "allowed_analytical_use": ["turnstile_count_for_completed_events"],
+          "description": "Turnstile attendance count for a completed event; not tickets sold.",
+          "excluded_use": ["tickets_sold", "revenue"],
+          "in_prompt": true,
+          "notes": ["Available only for completed events; NULL otherwise."],
+          "roles": ["turnstile", "not_tickets_sold"],
+          "synonyms": ["turnout"],
+          "unit": "people"
+        },
+        "capacity": {
+          "allowed_analytical_use": ["sold_out_denominator", "attendance_rate_denominator"],
+          "description": "Released capacity for this specific event; sold-out calculations use this column.",
+          "excluded_use": ["venue_physical_maximum"],
+          "in_prompt": true,
+          "notes": [
+            "May be lower than venues.capacity.",
+            "Sold-out calculations use events.capacity, never venues.capacity."
+          ],
+          "roles": ["event_released_capacity", "sold_out_denominator"],
+          "synonyms": ["event capacity", "released seats"],
+          "unit": "people"
+        },
+        "category": {
+          "description": "Event category domain: basketball, hockey, concert, comedy, or family.",
+          "in_prompt": true,
+          "roles": ["domain"],
+          "synonyms": ["event type"]
+        },
+        "event_date": {
+          "allowed_analytical_use": ["event_performance_period_filters", "upcoming"],
+          "description": "Business calendar date generated from start_local; use for event-performance and upcoming filters.",
+          "excluded_use": ["purchase_period_filters"],
+          "in_prompt": true,
+          "notes": ["Generated from start_local; analytically useful."],
+          "roles": ["event_calendar_date", "not_purchased_at"],
+          "synonyms": ["show date"]
+        },
+        "event_id": {
+          "description": "Event identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        },
+        "name": {
+          "description": "Event title.",
+          "in_prompt": true,
+          "synonyms": ["event name", "show name"]
+        },
+        "start_local": {
+          "description": "Business-local wall-clock start timestamp without offset.",
+          "in_prompt": true,
+          "roles": ["event_start_timestamp"],
+          "synonyms": ["start time"]
+        },
+        "status": {
+          "description": "Event lifecycle domain: scheduled, completed, or cancelled.",
+          "in_prompt": true,
+          "notes": [
+            "Cancelled events remain in gross ticket revenue; refunds reduce net.",
+            "Attendance is present exactly when status is completed."
+          ],
+          "roles": ["domain"],
+          "synonyms": ["event status"]
+        },
+        "venue_id": {
+          "description": "Host venue foreign key.",
+          "in_prompt": true,
+          "roles": ["foreign_key"]
+        }
+      },
+      "description": "One row is one event occurrence with status, category, released capacity, and optional attendance.",
+      "notes": [
+        "Attendance is a turnstile count, not tickets sold.",
+        "event_date is generated from start_local.",
+        "Sold-out calculations use events.capacity."
+      ],
+      "roles": ["event_occurrence"]
+    },
+    "order_items": {
+      "columns": {
+        "line_gross_cents": {
+          "allowed_analytical_use": ["gross_ticket_revenue"],
+          "description": "Generated line total: unit_price_cents multiplied by quantity. Already the product of paid price and quantity; do not multiply by quantity again.",
+          "excluded_use": ["face_value_revenue"],
+          "in_prompt": true,
+          "notes": [
+            "Revenue input together with unit_price_cents.",
+            "Face value is not a revenue input."
+          ],
+          "roles": ["revenue_input", "generated_line_gross", "never_face_value"],
+          "synonyms": ["line total"],
+          "unit": "cents"
+        },
+        "order_id": {
+          "description": "Parent order foreign key.",
+          "in_prompt": true,
+          "roles": ["foreign_key"]
+        },
+        "order_item_id": {
+          "description": "Order-item identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        },
+        "quantity": {
+          "allowed_analytical_use": ["tickets_sold"],
+          "description": "Number of tickets represented by this line; multiple individual tickets are not separate rows.",
+          "in_prompt": true,
+          "roles": ["ticket_quantity"],
+          "synonyms": ["tickets"],
+          "unit": "count"
+        },
+        "tier_id": {
+          "description": "Purchased ticket-tier foreign key.",
+          "in_prompt": true,
+          "roles": ["foreign_key"]
+        },
+        "unit_price_cents": {
+          "allowed_analytical_use": ["gross_ticket_revenue", "average_ticket_price"],
+          "description": "Actual paid price per ticket in cents. The only price input to revenue. May be zero for complimentary tickets.",
+          "excluded_use": ["face_value_as_revenue"],
+          "in_prompt": true,
+          "notes": ["Never substitute face_value_cents when computing revenue metrics."],
+          "roles": ["revenue_input", "actual_paid_price", "never_face_value"],
+          "synonyms": ["paid price", "price paid"],
+          "unit": "cents"
+        }
+      },
+      "description": "One row represents a quantity of tickets for one tier in one order; individual tickets are not modeled as separate rows.",
+      "notes": [
+        "line_gross_cents is generated as unit_price_cents * quantity.",
+        "unit_price_cents and line_gross_cents are revenue inputs; face value is not."
+      ],
+      "roles": ["line_item", "no_individual_ticket_identity"]
+    },
+    "orders": {
+      "columns": {
+        "channel": {
+          "description": "Sales channel domain: web, mobile_app, box_office, or partner.",
+          "in_prompt": true,
+          "roles": ["domain"],
+          "synonyms": ["sales channel"]
+        },
+        "order_id": {
+          "description": "Order identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        },
+        "order_ref": {
+          "description": "Display-only order reference string; excluded from ordinary model prompt context.",
+          "excluded_use": ["analytics", "joins", "prompt_context"],
+          "in_prompt": false,
+          "notes": ["Display-only."],
+          "roles": ["display_only", "prompt_excluded"],
+          "synonyms": ["order reference"]
+        },
+        "purchased_at": {
+          "allowed_analytical_use": ["purchase_period_filters"],
+          "description": "Business-local purchase timestamp; represents purchase time, not event time.",
+          "excluded_use": ["event_performance_period_filters"],
+          "in_prompt": true,
+          "roles": ["purchase_timestamp", "not_event_date"],
+          "synonyms": ["purchase time", "booked at"]
+        },
+        "status": {
+          "description": "Order state domain: completed or cancelled.",
+          "in_prompt": true,
+          "notes": [
+            "Only completed orders contribute to revenue and tickets sold.",
+            "Cancelled orders are excluded from analytical sales metrics."
+          ],
+          "roles": ["domain"],
+          "synonyms": ["order status"]
+        }
+      },
+      "description": "One row is one purchase transaction.",
+      "notes": [
+        "Only completed orders contribute to revenue and tickets sold.",
+        "Cancelled orders are excluded from analytical sales metrics.",
+        "order_ref is display-only and excluded from normal model prompt context."
+      ],
+      "roles": ["purchase_transaction"]
+    },
+    "refunds": {
+      "columns": {
+        "order_item_id": {
+          "description": "Refunded order-item foreign key; multiple refund rows may apply to one order item.",
+          "in_prompt": true,
+          "notes": ["Pre-aggregate by order_item_id before joining to lines."],
+          "roles": ["foreign_key", "requires_preaggregation"]
+        },
+        "reason": {
+          "description": "Refund reason domain: customer_request, event_cancelled, or duplicate_purchase.",
+          "in_prompt": true,
+          "roles": ["domain"]
+        },
+        "refund_amount_cents": {
+          "allowed_analytical_use": ["refunded_ticket_revenue", "net_ticket_revenue"],
+          "description": "Money returned in cents; affects net revenue and is independent of refunded_qty.",
+          "excluded_use": ["derive_refunded_qty"],
+          "in_prompt": true,
+          "notes": [
+            "Independent of refunded_qty.",
+            "A complimentary ticket may have positive refunded_qty and zero refund amount."
+          ],
+          "roles": ["refund_money", "independent_of_refunded_qty"],
+          "synonyms": ["refund money"],
+          "unit": "cents"
+        },
+        "refund_id": {
+          "description": "Refund identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        },
+        "refunded_at": {
+          "description": "Business-local refund timestamp.",
+          "in_prompt": true,
+          "roles": ["refund_timestamp"]
+        },
+        "refunded_qty": {
+          "allowed_analytical_use": ["tickets_net"],
+          "description": "Tickets returned; affects tickets_net and is independent of refund_amount_cents.",
+          "excluded_use": ["derive_refund_amount"],
+          "in_prompt": true,
+          "notes": [
+            "Independent of refund_amount_cents.",
+            "A complimentary ticket may have positive refunded_qty and zero refund amount."
+          ],
+          "roles": ["refund_quantity", "independent_of_refund_amount"],
+          "synonyms": ["returned tickets"],
+          "unit": "count"
+        }
+      },
+      "description": "One row is one refund transaction against an order item; multiple refund rows may apply to one order item.",
+      "notes": [
+        "Refund data must be pre-aggregated by order_item_id before joining to lines.",
+        "refunded_qty affects tickets_net; refund_amount_cents affects net revenue.",
+        "The two measures are intentionally independent.",
+        "Completed-order filtering applies to refunded-revenue metrics."
+      ],
+      "roles": ["refund_transaction", "requires_preaggregation"]
+    },
+    "ticket_tiers": {
+      "columns": {
+        "event_id": {
+          "description": "Owning event foreign key; tier_name uniqueness is scoped to this event.",
+          "in_prompt": true,
+          "roles": ["foreign_key"]
+        },
+        "face_value_cents": {
+          "allowed_analytical_use": ["list_price_description"],
+          "description": "Descriptive list price in cents. Never used in any revenue metric.",
+          "excluded_use": ["gross_ticket_revenue", "net_ticket_revenue", "average_ticket_price"],
+          "in_prompt": true,
+          "notes": ["Descriptive only. Never used in any revenue metric."],
+          "roles": ["list_price_only", "never_revenue"],
+          "synonyms": ["list price", "face value"],
+          "unit": "cents"
+        },
+        "tier_id": {
+          "description": "Ticket-tier identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        },
+        "tier_name": {
+          "description": "Seating-tier name within one event; not globally unique.",
+          "in_prompt": true,
+          "notes": [
+            "Uniqueness is scoped to event_id.",
+            "Grouping by tier_name across events combines distinct offerings."
+          ],
+          "roles": ["event_scoped_name"],
+          "synonyms": ["tier", "seating tier"]
+        }
+      },
+      "description": "One row is one ticket offering for one event. No individual-ticket identity is modeled.",
+      "notes": [
+        "tier_name is unique only within an event_id.",
+        "face_value_cents is descriptive list price and must never be used as revenue."
+      ],
+      "roles": ["price_offering", "no_individual_ticket_identity"]
+    },
+    "venues": {
+      "columns": {
+        "capacity": {
+          "allowed_analytical_use": ["venue_physical_maximum"],
+          "description": "Venue physical maximum capacity across configurations; not the sold-out denominator for an event.",
+          "excluded_use": ["sold_out_denominator", "attendance_rate_denominator"],
+          "in_prompt": true,
+          "notes": [
+            "Physical maximum.",
+            "Venue capacity is not the sold-out denominator for an event."
+          ],
+          "roles": ["venue_physical_capacity", "not_sold_out_denominator"],
+          "synonyms": ["venue capacity", "building capacity"],
+          "unit": "people"
+        },
+        "district": {
+          "description": "District label for the venue.",
+          "in_prompt": true,
+          "synonyms": ["neighborhood", "area"]
+        },
+        "name": {
+          "description": "Venue display name.",
+          "in_prompt": true,
+          "synonyms": ["venue name", "arena", "hall"]
+        },
+        "venue_id": {
+          "description": "Venue identifier.",
+          "in_prompt": true,
+          "roles": ["identifier"]
+        }
+      },
+      "description": "One row is one physical venue with a building-level capacity maximum.",
+      "notes": [
+        "capacity is the venue physical maximum.",
+        "Venue capacity is not the sold-out denominator for an event."
+      ],
+      "roles": ["physical_venue"]
+    }
+  },
+  "unsupported": {
+    "relative_time_of_day": {
+      "description": "Questions that depend on a current time within as_of are unsupported because as_of is a date with no current time.",
+      "examples": [
+        "has tonight's show started",
+        "what is happening right now",
+        "events after 6 PM today"
+      ],
+      "invent_default_forbidden": true
+    }
+  }
+}

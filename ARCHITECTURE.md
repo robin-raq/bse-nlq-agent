@@ -74,7 +74,7 @@ Each layer must be tested independently. Rejected SQL exposes `generated_sql` bu
 
 ## Data and prompting
 
-The dataset will be synthetic, BSE-flavored ticketing data produced by a deterministic seed. SQLite owns structural facts; version-controlled semantic metadata owns meanings, units, synonyms, categories, visibility, and business definitions.
+The dataset will be synthetic, BSE-flavored ticketing data produced by a deterministic seed. SQLite owns structural facts; version-controlled semantic metadata at `src/bse_nlq/metadata/schema.json` owns meanings, units, synonyms, categories, visibility, and business definitions. The typed loader is `bse_nlq.metadata.load_semantic_metadata(connection)`, which validates the packaged JSON (including duplicate-key rejection), returns deeply frozen nested mappings, and reconciles every physical application column plus exact foreign-key join guidance against SQLite introspection without restating types, keys, or nullability.
 
 Money is stored as integer cents. Dates use ISO text and half-open ranges. Relative dates are resolved from an explicit `as_of`; machine-clock SQL is prohibited.
 

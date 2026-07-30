@@ -3,14 +3,13 @@
 A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI Engineer take-home exercise. It is designed to turn a plain-English question into SQL, validate the generated query, execute it against a read-only SQLite database, and return the result with the SQL used.
 
 > **Current status:** the physical SQLite schema, deterministic 109-row seed
-> loader, JSON semantic metadata sidecar, strict ModelDecision validation, and
-> deterministic prompt construction are implemented and verified offline
-> (schema reconciliation against introspection; invariants I-1–I-8 and
-> development anchors A1–A14 against an in-memory database; prompt assembly from
-> SQLite structure plus semantic meaning). Provider adapters, SQL validation,
-> query execution, the NLQ service/CLI, persistent database build/distribution,
-> and final evaluation remain pending. Model-generated SQL has not been tested.
-> The application is not runnable end-to-end.
+> loader, JSON semantic metadata sidecar, strict ModelDecision validation,
+> deterministic prompt construction, and a persistent database builder are
+> implemented and verified offline. The generated SQLite file is synthetic,
+> deterministic, and untracked — build it locally; do not commit it. Provider
+> adapters, SQL validation, query execution, the NLQ service/CLI, and final
+> evaluation remain pending. Model-generated SQL has not been tested. The
+> application is not runnable end-to-end.
 
 
 ## Planned approach
@@ -58,6 +57,19 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
 ```
+
+Build a local synthetic database artifact (not committed; not an NLQ CLI):
+
+```bash
+uv run python -m bse_nlq.db.build /tmp/bse-nlq.sqlite3
+# replace an existing regular file only with an explicit flag:
+uv run python -m bse_nlq.db.build /tmp/bse-nlq.sqlite3 --overwrite
+```
+
+`overwrite=False` fails closed if the destination already exists (atomic
+no-clobber). `overwrite=True` replaces a regular non-symlink file and clears
+stale SQLite sidecars beside that path. Do not build over a database that
+another process has open.
 
 The automated suite is offline and does not require API credentials. Live
 provider checks and evaluation are separate explicit commands (not yet part of

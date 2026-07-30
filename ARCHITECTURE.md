@@ -1,8 +1,9 @@
 # Architecture
 
 > Approved target design. Schema, seed, semantic metadata, ModelDecision
-> validation, and deterministic prompt construction are implemented; provider
-> adapters, SQL policy, execution, and the CLI remain pending.
+> validation, deterministic prompt construction, and the persistent database
+> builder are implemented; read-only runtime connections, provider adapters,
+> SQL policy, execution, and the product CLI remain pending.
 
 ## Principles
 
@@ -38,7 +39,7 @@ Projection-unit analysis occurs before execution. The application never rewrites
 | Decision | Strict `parse_model_decision_json` / `validate_model_decision` |
 | Provider adapter | Prompt submission and response normalization (pending) |
 | SQL policy | Parsing, structural validation, and unit inference |
-| Database | Seeding, read-only connections, authorizer, and limits |
+| Database | Schema/seed, persistent artifact build, read-only connections, authorizer, and limits |
 | Formatting | Human and JSON output from executed values |
 | Evaluation | Frozen cases, reference queries, and reporting |
 
@@ -46,7 +47,7 @@ All implementation lives in the single `src/bse_nlq/` package. Modules should be
 
 Implemented module paths for this phase:
 
-- `bse_nlq.db` — `apply_schema`, `load_seed_data`
+- `bse_nlq.db` — `apply_schema`, `load_seed_data`, `build_database`
 - `bse_nlq.metadata` — `load_semantic_metadata`
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
@@ -101,6 +102,29 @@ Money is stored as integer cents. Dates use ISO text and half-open ranges. Relat
 Revenue definitions must state included statuses and refund treatment. Currency formatting is applied only when a unit can be proven from the projection and trusted metadata. Unknown units remain raw; a proven alias/unit contradiction is rejected.
 
 `build_prompt` assembles stable system instructions (application rules, introspected physical schema, semantic metadata), a clearly delimited user-question block, and the ModelDecision response schema. Raw sample rows, seed literals, reconciliation totals, and `orders.order_ref` are excluded from model-facing sections.
+
+## Persistent database artifact
+
+`bse_nlq.db.build_database(destination, *, overwrite=False) -> DatabaseBuildResult`
+composes the approved `apply_schema` and `load_seed_data` APIs into a filesystem
+SQLite file. The builder validates destination preconditions (parent must exist;
+existing destinations must be non-symlink regular files when overwritten),
+builds into a unique temporary sibling, validates the temporary database
+(enabling `PRAGMA foreign_keys` on the construction connection only — foreign-key
+enforcement is connection-local, not a permanent file property), computes file
+size/SHA-256/header checks and the logical fingerprint from the closed temporary
+artifact **before** publication, then publishes with atomic no-clobber `os.link`
+when `overwrite=False` or `os.replace` when `overwrite=True`. After successful
+publication it removes exact destination `-wal` / `-shm` / `-journal` sidecars
+before returning; a post-publication hygiene failure reports that publication
+already occurred and does not claim the previous destination survived.
+Concurrent external use or mutation of the destination during publication is
+unsupported. Generated `*.db` / `*.sqlite` / `*.sqlite3` files are gitignored
+and must not be committed. Logical content is fingerprinted for
+cross-environment reproducibility; SQLite file bytes are not claimed portable
+across engines or platforms. The developer utility
+`python -m bse_nlq.db.build PATH [--overwrite]` is not the product `ask` CLI.
+Read-only runtime connection factories remain a later boundary.
 
 ## Interface and states
 

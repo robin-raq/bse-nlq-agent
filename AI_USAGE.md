@@ -21,7 +21,8 @@ AI assisted with:
 - test-first implementation of the SQLite physical schema and its contract test suite;
 - test-first implementation of the deterministic seed loader, literal transcription from the tracked manifest, invariant/reconciliation/anchor SQL, and analytical trap regressions;
 - translating frozen business meaning from `docs/planning/schema-design.md` and `docs/planning/decisions.md` into the structured JSON semantic metadata sidecar and typed load/validate/reconcile API, with schema-reconciliation and leak checks covered by offline tests; and
-- translating the frozen ModelDecision contract and prompt architecture into typed validation, deterministic JSON Schema, schema/semantic rendering, and prompt construction, with offline tests for determinism, leakage, malformed output, and injection-boundary delimiting.
+- translating the frozen ModelDecision contract and prompt architecture into typed validation, deterministic JSON Schema, schema/semantic rendering, and prompt construction, with offline tests for determinism, leakage, malformed output, and injection-boundary delimiting; and
+- test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -70,12 +71,34 @@ boundary. No live provider call was made and no generated SQL was executed in
 this phase. Review-driven corrections included excluding `order_ref` from
 model-facing semantic notes, tightening physical-schema heading inventory
 checks against H4 collisions, and keeping as-of resolution free of system-clock
-reads.
+reads. A later bounded review also required rejecting reserved question-
+delimiter tokens, normalizing metadata reconciliation failures to
+`PromptConstructionError`, deduplicating the PROJECT_STATUS backlog, and
+restoring libc timezone state after determinism tests.
+
+## Persistent-database-build-phase review
+
+For the persistent SQLite artifact builder, AI implemented
+`build_database` as a composition of the approved schema and seed APIs with
+destination validation, unique-temporary sibling construction, pre-publication
+artifact checks, atomic publication, failure cleanup, logical content
+fingerprinting, a narrow `python -m bse_nlq.db.build` developer entry point,
+and offline tests including installed-wheel invocation. An independent review
+then found and led to corrections for: stale destination `-wal`/`-shm`/`-journal`
+replay after overwrite, evidence calculation after publication (failure after
+replace), `overwrite=False` check-then-replace races (now atomic no-clobber
+`os.link`), and replacement of FIFOs/symlinks/nonregular destinations without
+an explicit regular-file contract. Atomic publication, overwrite preservation,
+temporary/sidecar cleanup, reproducibility, and packaging behavior were
+independently exercised. No read-only runtime connection factory, SQL
+parser/validator, authorizer, query executor, provider adapter, live model
+request, product CLI, observability, or evaluation path was implemented in this
+phase.
 
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, and deterministic prompt construction are implemented and test-verified. No persistent application database file, query service, SQL safety validator, CLI, provider integration for SQL quality, or model-quality evaluation is complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, and persistent database builder are implemented and test-verified. Generated database files remain untracked local artifacts. No query service, SQL safety validator, product CLI, provider integration for SQL quality, or model-quality evaluation is complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

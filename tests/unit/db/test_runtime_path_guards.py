@@ -172,6 +172,45 @@ def test_readonly_uri_never_uses_unescaped_path_interpolation(
     assert "%23" in uri
 
 
+_UNKNOWN_USER_PATH = "~nosuchuser_zz/app.db"
+
+
+def _unknown_user_expansion_raises() -> bool:
+    """Whether ``~unknownuser`` expansion fails on this interpreter/platform."""
+    try:
+        Path(_UNKNOWN_USER_PATH).expanduser()
+    except RuntimeError:
+        return True
+    except Exception:  # pragma: no cover - platform-dependent
+        return False
+    return False  # pragma: no cover - platform-dependent
+
+
+@pytest.mark.skipif(
+    not _unknown_user_expansion_raises(),
+    reason="Path.expanduser() does not raise for unknown users on this platform",
+)
+def test_unknown_user_expansion_surfaces_runtime_error_type() -> None:
+    """Home-directory expansion failure must not escape as bare RuntimeError."""
+    with pytest.raises(DatabaseRuntimeError, match="expand") as exc_info:
+        open_readonly_database(_UNKNOWN_USER_PATH)
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    (
+        "/tmp/a\x00b.db",  # NUL in the filename component
+        "/tmp/a\x00b/x.db",  # NUL in a parent component
+    ),
+)
+def test_embedded_nul_surfaces_runtime_error_type(raw: str) -> None:
+    """Embedded NUL must not escape as bare ValueError."""
+    with pytest.raises(DatabaseRuntimeError, match="usable|path") as exc_info:
+        open_readonly_database(raw)
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
 def test_rejects_symlink(published_db: Path, tmp_path: Path) -> None:
     link = tmp_path / "link.db"
     os.symlink(published_db, link)

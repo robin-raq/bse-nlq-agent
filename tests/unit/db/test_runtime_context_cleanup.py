@@ -55,7 +55,12 @@ def test_failed_pragma_setup_does_not_leak_connection(
         on_sql: str,
     ) -> None:
         if name == "query_only":
-            raise RuntimeError("injected query_only failure")
+            # A genuine SQLite failure, not a bare RuntimeError: a
+            # programming defect from this helper must propagate unwrapped
+            # instead of being normalized (see
+            # test_runtime_exception_boundary.py::
+            # test_pragma_setup_runtime_error_propagates_unchanged).
+            raise sqlite3.OperationalError("injected query_only failure")
         real_enable(connection, name, on_sql=on_sql)
 
     monkeypatch.setattr("bse_nlq.db.runtime.sqlite3.connect", connect_and_track)
@@ -66,7 +71,7 @@ def test_failed_pragma_setup_does_not_leak_connection(
     with pytest.raises(DatabaseRuntimeError) as exc_info:
         open_readonly_database(published_db)
 
-    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert isinstance(exc_info.value.__cause__, sqlite3.Error)
     assert connections
     for conn in connections:
         with pytest.raises(sqlite3.ProgrammingError):
@@ -124,6 +129,92 @@ def test_system_exit_during_setup_cleans_up_and_reraises(
     for conn in connections:
         with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
+
+
+class _FailingCloseConnection:
+    """Stub standing in for a sqlite3 connection whose close() fails."""
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+        raise self._error
+
+
+def test_close_failure_raises_and_does_not_report_success(published_db: Path) -> None:
+    """A failed underlying close must not be reported as a closed wrapper."""
+    db = open_readonly_database(published_db)
+    real_connection = db._raw_connection
+    stub = _FailingCloseConnection(sqlite3.OperationalError("injected close failure"))
+    db._raw_connection = stub  # type: ignore[assignment]
+    try:
+        with pytest.raises(DatabaseRuntimeError, match="close") as exc_info:
+            db.close()
+        assert isinstance(exc_info.value.__cause__, sqlite3.OperationalError)
+        assert stub.close_calls == 1
+        assert db.closed is False
+        # The wrapper is still usable, so the caller can observe and retry.
+        assert db.metadata is not None
+    finally:
+        db._raw_connection = real_connection  # type: ignore[assignment]
+        db.close()
+    assert db.closed is True
+
+
+def test_close_failure_is_retryable(published_db: Path) -> None:
+    db = open_readonly_database(published_db)
+    real_connection = db._raw_connection
+    stub = _FailingCloseConnection(sqlite3.OperationalError("injected close failure"))
+    db._raw_connection = stub  # type: ignore[assignment]
+    with pytest.raises(DatabaseRuntimeError):
+        db.close()
+    assert db.closed is False
+    db._raw_connection = real_connection  # type: ignore[assignment]
+    db.close()
+    assert db.closed is True
+    db.close()
+    assert db.closed is True
+
+
+def test_keyboard_interrupt_from_close_propagates_unwrapped(
+    published_db: Path,
+) -> None:
+    db = open_readonly_database(published_db)
+    real_connection = db._raw_connection
+    stub = _FailingCloseConnection(KeyboardInterrupt())
+    db._raw_connection = stub  # type: ignore[assignment]
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            db.close()
+        assert db.closed is False
+    finally:
+        db._raw_connection = real_connection  # type: ignore[assignment]
+        db.close()
+
+
+def test_database_path_remains_readable_after_close(published_db: Path) -> None:
+    """Documented contract: path identity outlives the connection."""
+    db = open_readonly_database(published_db)
+    path_before = db.database_path
+    assert path_before == published_db.resolve()
+    db.close()
+
+    assert db.closed is True
+    assert db.database_path == path_before
+
+    for name in (
+        "metadata",
+        "physical_tables",
+        "physical_columns",
+        "prompt_visible_columns",
+        "prompt_excluded_columns",
+    ):
+        with pytest.raises(DatabaseRuntimeError, match="closed"):
+            getattr(db, name)
+    with pytest.raises(DatabaseRuntimeError, match="closed"):
+        _ = db._connection
 
 
 def test_load_extension_disabled(published_db: Path) -> None:

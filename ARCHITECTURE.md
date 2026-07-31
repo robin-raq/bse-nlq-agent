@@ -95,6 +95,25 @@ semantic metadata before readiness, and exposes immutable
 missing filesystem paths, not URI strings. `:memory:` and `file:` inputs are
 rejected explicitly.
 
+Error and lifecycle contract: expected open failures — filesystem
+`OSError`, path-expansion `RuntimeError`, invalid-path `ValueError` /
+`TypeError`, `sqlite3.Error`, and `MetadataError` — surface as
+`DatabaseRuntimeError` with the original exception preserved as `__cause__`.
+Normalization is localized to the specific path, SQLite-connection, or
+metadata operation that can legitimately raise it, not applied broadly across
+the whole open sequence. Programming defects (for example `AttributeError`,
+or a `RuntimeError` / `TypeError` / `ValueError` raised by a bug inside a
+metadata/inventory helper or the PRAGMA setup helper rather than an actual
+path, SQLite, or metadata failure) and `KeyboardInterrupt` /
+`SystemExit` propagate unwrapped after cleanup. `close()` is idempotent after
+a successful close, but a failed close raises `DatabaseRuntimeError` and leaves
+the wrapper open rather than reporting a closure that did not happen. When a
+`with` body and `close()` both fail, the close failure is primary and the body
+failure remains available through standard exception context.
+`database_path` is immutable identity and stays readable after close; every
+connection-dependent property and the package-private `_connection` reject use
+after close.
+
 Remaining independent controls are still pending and must each be tested before
 model-generated SQL is executed:
 

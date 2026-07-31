@@ -81,6 +81,12 @@ uv run python -c "from pathlib import Path; from bse_nlq.db import open_readonly
 db = open_readonly_database(Path('/tmp/bse-nlq.sqlite3')); print(sorted(db.physical_tables)); db.close()"
 ```
 
+Path, connection, and metadata failures raise `DatabaseRuntimeError` with the
+underlying cause attached. Programming defects are not normalized into that
+type. A failed `close()` raises rather than silently reporting success;
+`database_path` stays readable after close for diagnostics, while metadata and
+inventory access does not.
+
 The automated suite is offline and does not require API credentials. Live
 provider checks and evaluation are separate explicit commands (not yet part of
 the default workflow).

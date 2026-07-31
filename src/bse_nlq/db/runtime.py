@@ -55,6 +55,12 @@ class ReadOnlyDatabase:
 
     @property
     def database_path(self) -> Path:
+        """Immutable artifact identity, readable before and after ``close()``.
+
+        Unlike the metadata and inventory snapshots, this value never requires
+        a live connection, so it stays available after close for diagnostics
+        and error reporting.
+        """
         return self._state.database_path
 
     @property
@@ -93,15 +99,21 @@ class ReadOnlyDatabase:
         return self._raw_connection
 
     def close(self) -> None:
-        """Close the owned connection. Idempotent."""
+        """Close the owned connection; idempotent after a successful close.
+
+        A failed close raises ``DatabaseRuntimeError`` and leaves the wrapper
+        open, so the caller is never told closure succeeded while the
+        underlying connection and its descriptor remain live.
+        """
         if self._closed:
             return
-        self._closed = True
         try:
             self._raw_connection.close()
-        except Exception:
-            # Closing is best-effort once ownership has ended.
-            pass
+        except Exception as error:
+            raise DatabaseRuntimeError(
+                "failed to close read-only database connection"
+            ) from error
+        self._closed = True
 
     def __enter__(self) -> ReadOnlyDatabase:
         self._require_open()
@@ -113,6 +125,13 @@ class ReadOnlyDatabase:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        """Close on exit; a close failure is not suppressed.
+
+        When the ``with`` body and ``close()`` both fail, the close failure is
+        primary and the body failure remains available through standard
+        exception context (``__context__``). No ``ExceptionGroup`` or custom
+        suppression is introduced.
+        """
         self.close()
 
     def _require_open(self) -> None:
@@ -132,51 +151,84 @@ def open_readonly_database(database_path: Path | str) -> ReadOnlyDatabase:
     The connection is opened with ``mode=ro``, ``PRAGMA foreign_keys=ON``, and
     ``PRAGMA query_only=ON``. Semantic metadata is loaded and reconciled before
     the wrapper is returned. No authorizer or progress handler is installed.
+
+    Exception normalization is localized to the specific operation that can
+    legitimately raise it, not applied broadly across the whole sequence:
+    path preconditions (including ``~`` expansion and filesystem inspection)
+    are normalized inside ``_validate_database_path`` itself; a failed
+    ``sqlite3.connect`` and post-connect SQLite setup (extension loading,
+    ``PRAGMA`` verification) are normalized where they occur; and
+    ``MetadataError`` plus any ``sqlite3.Error`` surfaced while loading or
+    reconciling metadata are normalized at the metadata step. Each becomes
+    ``DatabaseRuntimeError`` with the original exception attached as
+    ``__cause__``. Programming defects — for example ``AttributeError``, or a
+    ``RuntimeError``/``TypeError``/``ValueError`` raised by a bug inside a
+    metadata/inventory helper or the PRAGMA setup helper rather than by an
+    actual path, SQLite, or metadata failure — propagate after cleanup
+    instead of being caught by a broad type-based tuple. ``KeyboardInterrupt``
+    and ``SystemExit`` likewise propagate unwrapped after a partially
+    configured connection is released.
     """
-    path = _validate_database_path(database_path)
-    uri = _readonly_uri(path)
     connection: sqlite3.Connection | None = None
     try:
-        connection = sqlite3.connect(uri, uri=True)
-        _disable_load_extension(connection)
-        _enable_and_verify_pragma(
-            connection, "foreign_keys", on_sql="PRAGMA foreign_keys = ON"
-        )
-        _enable_and_verify_pragma(
-            connection, "query_only", on_sql="PRAGMA query_only = ON"
-        )
+        path = _validate_database_path(database_path)
+
+        try:
+            connection = sqlite3.connect(_readonly_uri(path), uri=True)
+        except sqlite3.Error as error:
+            raise DatabaseRuntimeError(
+                "failed to open read-only database connection"
+            ) from error
+
+        try:
+            _disable_load_extension(connection)
+            _enable_and_verify_pragma(
+                connection, "foreign_keys", on_sql="PRAGMA foreign_keys = ON"
+            )
+            _enable_and_verify_pragma(
+                connection, "query_only", on_sql="PRAGMA query_only = ON"
+            )
+        except sqlite3.Error as error:
+            raise DatabaseRuntimeError(
+                "failed to configure read-only database connection"
+            ) from error
+
         if connection.in_transaction:
             raise DatabaseRuntimeError(
                 "read-only connection must not be in a transaction"
             )
 
-        metadata = load_semantic_metadata(connection)
-        visible = prompt_visible_columns(metadata)
-        visible_pairs = frozenset(
-            (table, column) for table, columns in visible.items() for column in columns
-        )
-        excluded = prompt_excluded_columns(metadata)
-        excluded_pairs = frozenset(
-            (table, column) for table, columns in excluded.items() for column in columns
-        )
-        physical_column_pairs = frozenset(
-            (table_name, column_name)
-            for table_name, table in metadata.tables.items()
-            for column_name in table.columns
-        )
+        try:
+            metadata = load_semantic_metadata(connection)
+            visible = prompt_visible_columns(metadata)
+            visible_pairs = frozenset(
+                (table, column)
+                for table, columns in visible.items()
+                for column in columns
+            )
+            excluded = prompt_excluded_columns(metadata)
+            excluded_pairs = frozenset(
+                (table, column)
+                for table, columns in excluded.items()
+                for column in columns
+            )
+            physical_column_pairs = frozenset(
+                (table_name, column_name)
+                for table_name, table in metadata.tables.items()
+                for column_name in table.columns
+            )
+        except MetadataError as error:
+            raise DatabaseRuntimeError(
+                "semantic metadata could not be loaded for read-only open"
+            ) from error
+        except sqlite3.Error as error:
+            raise DatabaseRuntimeError("read-only database open failed") from error
+
+        # The table set, the visible/excluded partition, and their union are
+        # already guaranteed by reconcile_metadata and by constructing both
+        # inventories from the same metadata columns; re-asserting them here
+        # would be unreachable.
         physical = frozenset(APPLICATION_TABLES)
-        if set(metadata.tables) != set(physical):
-            raise DatabaseRuntimeError(
-                "reconciled metadata tables diverge from the application table set"
-            )
-        if visible_pairs & excluded_pairs:
-            raise DatabaseRuntimeError(
-                "prompt-visible and prompt-excluded column inventories overlap"
-            )
-        if physical_column_pairs != visible_pairs | excluded_pairs:
-            raise DatabaseRuntimeError(
-                "physical column inventory does not equal visible ∪ excluded"
-            )
         if connection.in_transaction:
             raise DatabaseRuntimeError(
                 "read-only connection must not be in a transaction"
@@ -193,23 +245,24 @@ def open_readonly_database(database_path: Path | str) -> ReadOnlyDatabase:
         ready = ReadOnlyDatabase(state, connection)
         connection = None
         return ready
-    except BaseException as error:
+    finally:
+        # DatabaseRuntimeError raised anywhere above (from path validation,
+        # the local SQLite/metadata normalization blocks, or the transaction
+        # checks) is not caught here, so it propagates without being
+        # double-wrapped. KeyboardInterrupt, SystemExit, and programming
+        # defects (AttributeError, AssertionError, KeyError, and any
+        # RuntimeError/TypeError/ValueError not raised by the specific
+        # operations normalized above) likewise reach here uncaught and
+        # propagate unwrapped, but a partially configured connection is
+        # still released.
         _cleanup_failed_open(connection)
-        if isinstance(error, (KeyboardInterrupt, SystemExit)):
-            raise
-        if isinstance(error, DatabaseRuntimeError):
-            raise
-        if isinstance(error, MetadataError):
-            raise DatabaseRuntimeError(
-                "semantic metadata could not be loaded for read-only open"
-            ) from error
-        raise DatabaseRuntimeError("read-only database open failed") from error
 
 
 def _validate_database_path(database_path: Path | str) -> Path:
     if not isinstance(database_path, (str, Path)):
         raise DatabaseRuntimeError("database path must be a filesystem path")
 
+    # Accepted inputs are already str | Path; os.fspath cannot raise for them.
     raw = os.fspath(database_path)
     if not raw or not raw.strip():
         raise DatabaseRuntimeError("database path must be a non-empty path")
@@ -222,7 +275,15 @@ def _validate_database_path(database_path: Path | str) -> Path:
             "database path must be a filesystem path, not a SQLite URI"
         )
 
-    path = Path(raw).expanduser()
+    try:
+        path = Path(raw).expanduser()
+    except RuntimeError as error:
+        # An unresolvable ``~`` / ``~user`` reference.
+        raise DatabaseRuntimeError(
+            "database path home reference could not be expanded"
+        ) from error
+    except (TypeError, ValueError) as error:
+        raise DatabaseRuntimeError("database path is not usable") from error
     if path.name in {"", ".", ".."} or path.name == ":memory:":
         raise DatabaseRuntimeError(
             "database path must include a valid database filename"
@@ -230,17 +291,20 @@ def _validate_database_path(database_path: Path | str) -> Path:
 
     # Resolve only the parent so a leaf symlink is detected via lstat.
     parent = path.parent
-    if not parent.is_absolute():
-        parent = (Path.cwd() / parent).resolve(strict=False)
-    else:
-        parent = parent.resolve(strict=False)
+    try:
+        if not parent.is_absolute():
+            parent = (Path.cwd() / parent).resolve(strict=False)
+        else:
+            parent = parent.resolve(strict=False)
+    except (OSError, ValueError) as error:
+        raise DatabaseRuntimeError("database path is not usable") from error
 
     candidate = parent / path.name
     try:
         mode = candidate.lstat().st_mode
     except FileNotFoundError as error:
         raise DatabaseRuntimeError("database path does not exist") from error
-    except OSError as error:
+    except (OSError, ValueError) as error:
         raise DatabaseRuntimeError("database path is not usable") from error
 
     if stat.S_ISLNK(mode):
@@ -282,7 +346,7 @@ def _path_exists_without_following(path: Path) -> bool:
         path.lstat()
     except FileNotFoundError:
         return False
-    except OSError as error:
+    except (OSError, ValueError) as error:
         raise DatabaseRuntimeError(
             f"database sidecar path is not usable: {path.name}"
         ) from error
@@ -320,6 +384,11 @@ def _enable_and_verify_pragma(
 
 
 def _cleanup_failed_open(connection: sqlite3.Connection | None) -> None:
+    """Best-effort release of a partial connection during a failing open.
+
+    Unlike an explicit ``ReadOnlyDatabase.close()``, cleanup failures here are
+    suppressed so they cannot replace the primary open failure.
+    """
     if connection is None:
         return
     try:

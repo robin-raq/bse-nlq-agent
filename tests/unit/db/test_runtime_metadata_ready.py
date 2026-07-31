@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from types import MappingProxyType
 
@@ -68,15 +69,24 @@ def test_metadata_nested_maps_reject_mutation(published_db: Path) -> None:
 def test_metadata_failure_closes_connection(
     published_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A genuine SQLite failure surfaced while loading metadata normalizes.
+
+    Uses ``sqlite3.OperationalError`` rather than a bare ``RuntimeError``:
+    the latter would be a programming defect in ``load_semantic_metadata``
+    and must propagate unwrapped instead (see
+    ``tests/unit/db/test_runtime_exception_boundary.py::
+    test_metadata_inventory_runtime_error_propagates_unchanged``).
+    """
+
     def boom(_connection: object) -> object:
-        raise RuntimeError("injected metadata failure")
+        raise sqlite3.OperationalError("injected metadata failure")
 
     monkeypatch.setattr("bse_nlq.db.runtime.load_semantic_metadata", boom)
 
     with pytest.raises(DatabaseRuntimeError) as exc_info:
         open_readonly_database(published_db)
 
-    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert isinstance(exc_info.value.__cause__, sqlite3.Error)
     # No leaked ready wrapper; a second open of the same path still works once
     # the monkeypatch is undone below.
     monkeypatch.undo()

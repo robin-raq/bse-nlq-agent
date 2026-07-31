@@ -4,12 +4,14 @@ A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI Eng
 
 > **Current status:** the physical SQLite schema, deterministic 109-row seed
 > loader, JSON semantic metadata sidecar, strict ModelDecision validation,
-> deterministic prompt construction, and a persistent database builder are
+> deterministic prompt construction, a persistent database builder, and a safe
+> read-only runtime open (`open_readonly_database` / `ReadOnlyDatabase`) are
 > implemented and verified offline. The generated SQLite file is synthetic,
-> deterministic, and untracked — build it locally; do not commit it. Provider
-> adapters, SQL validation, query execution, the NLQ service/CLI, and final
-> evaluation remain pending. Model-generated SQL has not been tested. The
-> application is not runnable end-to-end.
+> deterministic, and untracked — build it locally; do not commit it. Generated
+> SQL validation, authorizer/limits, query execution, the NLQ service/CLI, and
+> final evaluation remain pending. There is no public raw-SQL API and no product
+> ask command. Model-generated SQL has not been tested. The application is not
+> runnable end-to-end.
 
 
 ## Planned approach
@@ -39,14 +41,15 @@ The MVP targets GPT-5 mini. A hosted `openai/gpt-oss-120b` endpoint is planned a
 
 Model output is treated as untrusted input. The planned execution boundary combines:
 
-- a read-only database connection;
-- SQLite `query_only`;
-- parsed-AST policy checks;
-- a default-deny SQLite authorizer;
-- an execution instruction budget; and
-- a result-row cap.
+- a read-only database connection (**implemented** as `open_readonly_database`);
+- SQLite `query_only` (**implemented** and verified on that connection);
+- parsed-AST policy checks (pending);
+- a default-deny SQLite authorizer (pending);
+- an execution instruction budget (pending); and
+- a result-row cap (pending).
 
-These controls will be tested independently. No safety claim is considered verified until the implementation and tests exist.
+The open boundary is tested offline. Remaining safety layers must be tested
+independently before model-generated SQL is executed.
 
 ## Running and testing
 
@@ -70,6 +73,13 @@ uv run python -m bse_nlq.db.build /tmp/bse-nlq.sqlite3 --overwrite
 no-clobber). `overwrite=True` replaces a regular non-symlink file and clears
 stale SQLite sidecars beside that path. Do not build over a database that
 another process has open.
+
+Open a published artifact read-only (developer/library API; not an NLQ CLI):
+
+```bash
+uv run python -c "from pathlib import Path; from bse_nlq.db import open_readonly_database; \
+db = open_readonly_database(Path('/tmp/bse-nlq.sqlite3')); print(sorted(db.physical_tables)); db.close()"
+```
 
 The automated suite is offline and does not require API credentials. Live
 provider checks and evaluation are separate explicit commands (not yet part of

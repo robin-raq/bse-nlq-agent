@@ -1,9 +1,10 @@
 # Architecture
 
 > Approved target design. Schema, seed, semantic metadata, ModelDecision
-> validation, deterministic prompt construction, and the persistent database
-> builder are implemented; read-only runtime connections, provider adapters,
-> SQL policy, execution, and the product CLI remain pending.
+> validation, deterministic prompt construction, the persistent database
+> builder, and the read-only runtime factory are implemented; SQLGlot policy,
+> authorizer, progress/result limits, controlled execution, provider adapters,
+> QueryService, and the product CLI remain pending.
 
 ## Principles
 
@@ -39,7 +40,7 @@ Projection-unit analysis occurs before execution. The application never rewrites
 | Decision | Strict `parse_model_decision_json` / `validate_model_decision` |
 | Provider adapter | Prompt submission and response normalization (pending) |
 | SQL policy | Parsing, structural validation, and unit inference |
-| Database | Schema/seed, persistent artifact build, read-only connections, authorizer, and limits |
+| Database | Schema/seed, persistent artifact build, read-only runtime open; authorizer and limits pending |
 | Formatting | Human and JSON output from executed values |
 | Evaluation | Frozen cases, reference queries, and reporting |
 
@@ -47,7 +48,7 @@ All implementation lives in the single `src/bse_nlq/` package. Modules should be
 
 Implemented module paths for this phase:
 
-- `bse_nlq.db` — `apply_schema`, `load_seed_data`, `build_database`
+- `bse_nlq.db` — `apply_schema`, `load_seed_data`, `build_database`, `open_readonly_database` / `ReadOnlyDatabase`
 - `bse_nlq.metadata` — `load_semantic_metadata`
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
@@ -80,18 +81,32 @@ The MVP endpoint is GPT-5 mini through OpenAI Responses. The comparison candidat
 
 ## SQL safety
 
-Static policy uses the parsed SQLite AST and introspected schema, never regex or semicolon heuristics. It requires one approved read-only statement, rejects forbidden constructs and recursive CTEs, validates physical tables separately from CTE names, applies a fail-closed function policy, and rejects clock-dependent SQL.
+U1 implements the read-only runtime open boundary only:
+`open_readonly_database(database_path) -> ReadOnlyDatabase`. The wrapper is
+context-managed, privately owns one `sqlite3.Connection` (package-private
+`_connection`; no public arbitrary-SQL surface), opens an absolute filesystem
+path via `Path.as_uri()` with `mode=ro` and `uri=True`, enables and verifies
+`PRAGMA foreign_keys=ON` and `PRAGMA query_only=ON`, rejects exact sibling
+`-wal` / `-shm` / `-journal` sidecars without deleting them, reconciles packaged
+semantic metadata before readiness, and exposes immutable
+`physical_tables` / `physical_columns` / `prompt_visible_columns` /
+`prompt_excluded_columns` inventories. Existing filenames containing `?`, `#`,
+`%`, spaces, or Unicode are supported; missing ordinary paths are reported as
+missing filesystem paths, not URI strings. `:memory:` and `file:` inputs are
+rejected explicitly.
 
-Execution uses independent controls:
+Remaining independent controls are still pending and must each be tested before
+model-generated SQL is executed:
 
-1. SQLite URI opened with `mode=ro`.
-2. `PRAGMA query_only=ON`.
-3. SQLGlot AST policy.
-4. Default-deny SQLite authorizer.
-5. Progress-handler instruction budget.
-6. Result-row cap.
+1. SQLGlot AST policy producing immutable `ValidatedSql`.
+2. Default-deny SQLite authorizer.
+3. Progress-handler instruction budget.
+4. Result-row / column caps and controlled execution.
 
-Each layer must be tested independently. Rejected SQL exposes `generated_sql` but leaves `executed_sql` null.
+Static policy will use the parsed SQLite AST and introspected schema, never
+regex or semicolon heuristics. Rejected SQL will expose `generated_sql` but
+leave `executed_sql` null. The complete SQL-safety foundation is not yet
+implemented.
 
 ## Data and prompting
 
@@ -124,7 +139,8 @@ and must not be committed. Logical content is fingerprinted for
 cross-environment reproducibility; SQLite file bytes are not claimed portable
 across engines or platforms. The developer utility
 `python -m bse_nlq.db.build PATH [--overwrite]` is not the product `ask` CLI.
-Read-only runtime connection factories remain a later boundary.
+Read-only runtime opening is `open_readonly_database`; it is not a query
+service and does not install an authorizer, progress handler, or executor.
 
 ## Interface and states
 

@@ -95,10 +95,43 @@ parser/validator, authorizer, query executor, provider adapter, live model
 request, product CLI, observability, or evaluation path was implemented in this
 phase.
 
+## Read-only-runtime-factory-phase review
+
+For the read-only runtime database factory (U1 only), AI implemented
+`open_readonly_database` / `ReadOnlyDatabase` test-first: path-to-`mode=ro` URI
+opening via `Path.as_uri()`, nonsymlink regular-file guards, exact sibling
+`-wal`/`-shm`/`-journal` rejection without suffix-only target bans, literal-`?`
+filename support distinct from URI/query strings, `foreign_keys` and
+`query_only` verification, semantic metadata load/reconcile before readiness,
+immutable physical/visible/excluded column inventories, and idempotent
+context-manager close with fail-closed cleanup. An independent review blocked
+commit for blanket `?` rejection, missing sibling-sidecar checks, suffix-only
+sidecar bans, and weak mutation coverage; those findings were fixed with
+regression tests first (literal `?` open, exact sibling rejection, legitimate
+`*-wal`/`*-shm`/`*-journal` targets, independent `mode=ro` proof, URI encoding
+guards). A closure review then blocked character-based URI classification of
+missing ordinary filesystem paths containing `?` or `#`; that path now always
+reports missing-file errors while retaining explicit `:memory:` / `file:`
+rejects. A final targeted closure review returned APPROVE after verifying path
+classification, URI-sensitive filenames, sidecar contracts, independent
+`mode=ro`, inventories/wrapper boundary, lifecycle/reconciliation coverage, and
+all thirteen required mutations (restored). Validation: `uv run pytest` (full
+suite, 505 tests), `ruff check .`, `ruff format --check .`, `mypy src`,
+`uv lock --check`, `git diff --check`, and secret-pattern scan. Critical
+mutations (URI misclassification, remove `file:` reject, blanket `?` ban,
+unsafe URI interpolation, skip sibling rejection, suffix-only ban, remove
+`mode=ro`, skip `query_only`/`foreign_keys`, skip reconcile, omit cleanup,
+public `execute`, mutable allowlists) were exercised and restored. Docs
+(`ARCHITECTURE.md`, `PROJECT_STATUS.md`, `README.md`, `AI_USAGE.md`) were
+synced for truthful U1 status without claiming the full SQL-safety foundation.
+No SQLGlot policy, authorizer, progress/row/column limits, query execution,
+QueryService, provider adapter, CLI, or terminal-state mapping was added in
+this slice. No live provider requests were made. U2–U5 remain deferred.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, and persistent database builder are implemented and test-verified. Generated database files remain untracked local artifacts. No query service, SQL safety validator, product CLI, provider integration for SQL quality, or model-quality evaluation is complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, and read-only runtime database factory are implemented and test-verified. Generated database files remain untracked local artifacts. No query service, SQL safety validator beyond the runtime open boundary, product CLI, provider integration for SQL quality, or model-quality evaluation is complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

@@ -8,7 +8,8 @@ A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI Eng
 > read-only runtime open (`open_readonly_database` / `ReadOnlyDatabase`), and
 > SQL-policy Slices 1–2 (`validate_sql` / `ValidatedSql`: parse/normalize/
 > fingerprint plus allowed SELECT/UNION roots, whole-tree forbidden-construct
-> rejection, recursive-CTE rejection, and parameter rejection) are implemented
+> rejection, approved SELECT/UNION CTE-body enforcement, recursive-CTE
+> rejection, and parameter rejection) are implemented
 > and verified offline. Schema-aware AST authorization, authorizer/limits,
 > query execution, the NLQ service/CLI, and final evaluation remain pending.
 > There is no public raw-SQL API and no product ask command. Model-generated
@@ -32,7 +33,7 @@ Only SQL generation is nondeterministic. Validation, execution, and formatting r
 
 - Python 3.13 managed with `uv`
 - OpenAI SDK
-- SQLGlot for SQL parsing and validation
+- SQLGlot 30.14.0 for SQL parsing and validation
 - SQLite
 - pytest, Ruff, and mypy
 
@@ -63,6 +64,19 @@ uv run ruff format --check .
 uv run mypy src
 ```
 
+Hatchling 1.31.0 is pinned as both the build backend and a locked development
+dependency. After `uv sync --group dev`, an offline wheel build can use the
+synchronized environment directly:
+
+```bash
+uv build --wheel --offline --no-build-isolation
+```
+
+The ordinary isolated `uv build --wheel --offline` also works when the uv cache
+already contains the pinned backend. A cold empty cache cannot construct the
+isolated build offline because it has no Hatchling artifact; dependencies must
+be synchronized while available first. The project does not vendor build tools.
+
 Build a local synthetic database artifact (not committed; not an NLQ CLI):
 
 ```bash
@@ -85,7 +99,10 @@ db = open_readonly_database(Path('/tmp/bse-nlq.sqlite3')); print(sorted(db.physi
 
 Path, connection, and metadata failures raise `DatabaseRuntimeError` with the
 underlying cause attached. Programming defects are not normalized into that
-type. A failed `close()` raises rather than silently reporting success;
+type. A SQLite failure from `close()` becomes `DatabaseRuntimeError`;
+programming, resource, and control-flow failures propagate unchanged. Any
+failed close leaves the wrapper open and retryable rather than silently
+reporting success;
 `database_path` stays readable after close for diagnostics, while metadata and
 inventory access does not.
 

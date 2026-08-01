@@ -110,8 +110,9 @@ or a `RuntimeError` / `TypeError` / `ValueError` raised by a bug inside a
 metadata/inventory helper or the PRAGMA setup helper rather than an actual
 path, SQLite, or metadata failure) and `KeyboardInterrupt` /
 `SystemExit` propagate unwrapped after cleanup. `close()` is idempotent after
-a successful close, but a failed close raises `DatabaseRuntimeError` and leaves
-the wrapper open rather than reporting a closure that did not happen. When a
+a successful close. A SQLite close failure becomes `DatabaseRuntimeError`;
+programming, resource, and control-flow failures propagate unchanged. Every
+failed close leaves the wrapper open rather than reporting closure. When a
 `with` body and `close()` both fail, the close failure is primary and the body
 failure remains available through standard exception context.
 `database_path` is immutable identity and stays readable after close; every
@@ -131,13 +132,28 @@ The SQL-policy package (`validate_sql` → immutable `ValidatedSql`) parses with
 SQLGlot's SQLite dialect, rejects empty/semicolon-only and multi-statement
 input, preserves trimmed `original_sql` for later execution, fingerprints
 deterministic `normalized_sql`, accepts only `Select`/`Union` roots (including
-parenthesized SELECT and nonrecursive CTEs), default-denies other roots,
-rejects forbidden constructs anywhere in the tree, rejects recursive CTEs, and
-rejects parameters/`Placeholder`/`Parameter`/unquoted `$…` forms. It does
+parenthesized SELECT and nonrecursive CTEs), requires every unwrapped CTE body
+to use those same approved query roots, default-denies other roots, rejects
+forbidden constructs anywhere in the tree, rejects recursive CTEs, and rejects
+parameters/`Placeholder`/`Parameter`/unquoted `$…` forms. It does
 **not** yet authorize tables or columns. Static policy uses the parsed SQLite
 AST, never regex or semicolon heuristics as the primary authority. Rejected
 SQL will expose `generated_sql` but leave `executed_sql` null. The complete
 SQL-safety foundation is not yet implemented.
+
+Slice 3 source authorization is locked to SQLGlot scope structure: only
+`scope.sources` classifies sources (`exp.Table` is physical; nested `Scope` is
+CTE/derived). `scope.tables`, raw `find_all(exp.Table)`, and `qualify()` are not
+authorization authorities; qualification may support analysis, while the
+application independently owns allowlists, exclusions, qualifiers, ambiguity,
+visibility, and functions. Unqualified names resolve at one scope level at a
+time: reject multiple local matches, bind one, and move outward only after zero
+matches. `COUNT(*)` is the sole allowed star shape; projection `*` and
+`alias.*` are rejected from the projection AST without SQLite expansion.
+Identifier matching is SQLite-compatible and case-insensitive, including for
+quoted identifiers, with canonical names supplied by application inventories;
+normalization is performed on a copy. No analysis rewrite replaces
+`original_sql`; `normalized_sql` remains evidence only.
 
 ## Data and prompting
 

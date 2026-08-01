@@ -36,6 +36,29 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
 - Authorizer actions use an explicit action-code mapping, never a reverse lookup over `sqlite3` constants. Numeric values repeat across namespaces: action code 19 is `SQLITE_PRAGMA`, while the unrelated result code `SQLITE_CONSTRAINT` is also 19.
 - Unit/alias contradictions rejected before execution; unknown units remain unformatted.
 
+#### Locked U2 Slice 3 authorization rules
+
+- Physical-source classification uses only `scope.sources`: an `exp.Table`
+  value is a physical-table candidate, while a nested `Scope` is a CTE or
+  derived source. Neither `scope.tables` nor raw `find_all(exp.Table)` is an
+  authorization authority.
+- SQLGlot `qualify()` is supporting analysis only. Application code remains
+  authoritative for table allowlists, prompt exclusions, qualifiers,
+  ambiguity, column visibility, and functions.
+- Unqualified columns resolve local-ambiguity-first: inspect local sources,
+  reject more than one local match, bind exactly one local match, and consult
+  the next outer scope only after zero local matches. Apply the same ambiguity
+  rule independently at every outer level.
+- `COUNT(*)` is allowed; bare projection `*` and qualified `alias.*` are
+  rejected. Detect bare projection stars through the projection AST rather
+  than `scope.stars` alone, and never expand stars by executing against SQLite.
+- Identifier comparisons follow SQLite-compatible case-insensitive behavior,
+  including quoted identifiers. Canonical output names come from application
+  inventories; identifier normalization operates on a copy only.
+- Validation never rewrites the execution payload: `original_sql` remains the
+  later byte-for-byte payload and `normalized_sql` remains evidence only.
+  Casing or qualifier normalization must not replace `original_sql`.
+
 ### Schema and dataset
 
 Full contract in [`schema-design.md`](schema-design.md).

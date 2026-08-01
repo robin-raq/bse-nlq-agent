@@ -388,6 +388,88 @@ Deferred: Slice 3+ table/column/star/function/date authorization, authorizer,
 execution, QueryService, terminal-state mapping. No provider or network
 calls for this slice validation.
 
+## Post-Slice-2 independent corrective review
+
+Codex performed an independent senior review after commit `10cef029` and found
+three confirmed implementation gaps: explicit `ReadOnlyDatabase.close()`
+normalized every `Exception`; SQLGlot fallback aliases allowed nested
+`SAVEPOINT`/`RELEASE` CTE bodies; and the whole-tree forbidden tests did not
+exercise all parser-reachable nested classes. The review also identified the
+subset-only `sql_policy.__all__` assertion and unconstrained SQLGlot/Hatchling
+declarations. Its claim that cold empty-cache offline construction blocked all
+foundation work was treated as overclassified: an unseeded cache cannot supply
+an unvendored PEP 517 backend, so the limitation is reported rather than hidden
+or solved by vendoring.
+
+Genuine pre-fix red tests showed two close failures (`RuntimeError` and
+`MemoryError`) being wrapped as `DatabaseRuntimeError`, and four invalid CTEs
+(`SAVEPOINT`, `RELEASE`, `VALUES`, and `INTERSECT`) being accepted. SQLGlot
+30.14.0 probes found that `SAVEPOINT y` and `RELEASE y` are CTE-body `Alias`
+nodes over `Column` and normalize respectively as `SAVEPOINT AS y` and
+`RELEASE AS y`; ordinary `SELECT`, parenthesized `SELECT`, and `UNION` bodies
+remain query roots. A `VALUES` CTE is rewritten to a `Select` containing a
+`Values` descendant, while `INTERSECT` remains an `Intersect` body.
+
+The correction normalizes only `sqlite3.Error` from explicit close and retains
+it as `DatabaseRuntimeError.__cause__`; programming, resource, and control-flow
+failures propagate as the same object, leave `closed=False`, and permit retry.
+Structure policy now walks every `exp.CTE`, unwraps only `Subquery` root layers,
+requires `Select` or `Union`, and rejects the parser's nested `Values` rewrite.
+This is AST-only, does not mutate the expression, keeps ordinary projection and
+table aliases (including `REPLACE(...) AS ...`), and preserves precedence:
+unsupported root, whole-tree forbidden node, invalid CTE body as
+`forbidden_construct`, recursive CTE, then parameter.
+
+Parser reachability was classified from real SQL rather than manufactured
+nodes. Nested CTE bodies can produce `Insert`, `Update`, `Delete`, `Merge`,
+`Create`, `Drop`, `Pragma`, `Attach`, `Detach`, `Command` (`VACUUM`), `Analyze`,
+`Transaction`, `Commit`, and `Rollback`; each now has a direct class-specific
+whole-tree test. `Alter`, `TruncateTable`, `Grant`, and `Revoke` are produced as
+top-level roots but their attempted nested forms fail parsing under this
+dialect/version, so their retained tuple entries are defense in depth and
+root-policy tests remain the observable protection. SQLite `REPLACE INTO`
+falls back to `Command` at the root, while nested forms do not parse. Removing
+each reachable class changes its test from the class-specific whole-tree
+message to the generic CTE-body rejection; exact `Update` and `Command`
+mutations were also run independently.
+
+SQL-policy exports are locked to exactly `InvalidSqlError`, `SqlPolicyError`,
+`SqlRejectedError`, `SqlRejectionReason`, `ValidatedSql`, and `validate_sql`.
+SQLGlot is pinned to `30.14.0`. Hatchling is pinned to `1.31.0` in both the
+build-system declaration and locked dev environment. Normal wheel construction,
+cached isolated `--offline`, and synchronized no-build-isolation offline builds
+pass. An intentionally empty uv cache correctly
+fails isolated offline construction because Hatchling is absent. A clean-venv
+offline install of all wheel dependencies also exposed the existing
+unconstrained `openai` cache-resolution limitation; the SQL-policy wheel probe
+therefore installed the wheel with `--no-deps` plus pinned cached SQLGlot and
+proved the requested installed behavior without importing a provider, opening
+SQLite, or using the network. Wheel metadata contains
+`Requires-Dist: sqlglot==30.14.0`.
+
+Mutations detected broad close catching, missing SQLite normalization, early
+`closed=True`, missing explicit cause, disabled CTE validation, allowed Alias /
+Values / Intersect bodies, every reachable forbidden-class removal, wrong CTE
+reason, global Alias rejection, an extra private export, and removal of the
+SQLGlot constraint. An accidental non-underscored helper export passed the old
+subset assertion and failed the new equality assertion. Existing parsing tests
+reconfirmed normalization and
+fingerprint behavior. Final offline validation: 14 context-cleanup tests, 27
+runtime exception-boundary tests, 92 runtime tests, 144 SQL-policy tests, 381
+database tests, 69 metadata tests, 92 decision/prompt tests, and 689 full-suite
+tests; Ruff check/format, strict mypy, lock check, diff check, secret scan,
+wheel build/metadata, and installed-wheel SQL-policy probe pass.
+
+The candidate manually reviewed the diff and kept deferred findings out of
+scope: deep response-schema freezing, terminal-state removal from decision
+errors, QueryRequest/PromptInput naming, prompt/runtime connection bridging,
+FIFO/socket portability, stale teaching documentation, full provider
+integration, Slice 3 authorization, authorizer, execution, QueryService, CLI,
+and evaluation. The locked Slice 3 rules were documented but not implemented.
+No provider request was made. Network use in this pass was limited to the
+requested `git fetch origin`; dependency/build checks used the synchronized
+environment and local uv cache.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.

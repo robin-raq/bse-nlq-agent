@@ -7,7 +7,8 @@ Precedence (first match wins):
 3. recursive CTE
 4. parameterized SQL
 
-Does not authorize tables/columns, open SQLite, or mutate the AST.
+Physical-table authorization runs after these checks (Slice 3). Does not
+authorize columns, open SQLite, or mutate the AST.
 """
 
 from __future__ import annotations

@@ -8,8 +8,10 @@ Slice 2: allowed SELECT/UNION roots and CTE bodies, whole-tree
 forbidden-construct rejection, recursive-CTE rejection, and
 parameter/placeholder rejection.
 
-Table, column, star, function, and date authorization remain later slices.
-This package does not open SQLite or execute SQL.
+Slice 3: physical-table authorization from SQLGlot ``scope.sources`` with
+canonical ``referenced_tables`` output. Column, star, function, and date
+authorization remain later slices. This package does not open SQLite or
+execute SQL.
 """
 
 from __future__ import annotations

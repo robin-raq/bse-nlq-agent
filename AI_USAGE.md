@@ -24,7 +24,8 @@ AI assisted with:
 - translating the frozen ModelDecision contract and prompt architecture into typed validation, deterministic JSON Schema, schema/semantic rendering, and prompt construction, with offline tests for determinism, leakage, malformed output, and injection-boundary delimiting; and
 - test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage; and
 - test-first implementation of U2 Slice 1 SQL-policy parsing (`bse_nlq.sql_policy.validate_sql` → immutable `ValidatedSql`), including SQLGlot probes, single-statement enforcement, fingerprinting, ten mutation checks, and installed-wheel import without SQLite execution; and
-- test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution.
+- test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution; and
+- test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -470,10 +471,126 @@ No provider request was made. Network use in this pass was limited to the
 requested `git fetch origin`; dependency/build checks used the synchronized
 environment and local uv cache.
 
+## U2 Slice 3 — physical-table authorization via scope.sources
+
+Offline probes against SQLGlot **30.14.0** established:
+
+- Scope construction uses `sqlglot.optimizer.scope.traverse_scope`.
+- Authority surface is `scope.sources`: values are either `exp.Table`
+  (physical candidate) or nested `Scope` (CTE / derived / Values wrapper).
+- Source keys are aliases when present (`events AS e` → key `e`) while the
+  physical name remains on `Table.name` / `Table.this`.
+- CTE shadowing (`WITH events AS (SELECT 1) SELECT 1 FROM events`) classifies
+  the outer source as nested `Scope`; `scope.tables` and
+  `expression.find_all(exp.Table)` still report an `events` table node and
+  must not authorize.
+- Union/Union All emit per-branch Select scopes plus a parent Union scope.
+- Qualifiers appear as `Table.args["db"]` / `["catalog"]` Identifier nodes
+  (`main.events`, `a.b.c`); unqualified tables leave both `None`.
+- `json_each('[1,2]')` parses as `exp.Table` whose `this` is `exp.Anonymous`
+  with empty `name` — unsupported table-source kind, not a physical inventory
+  match.
+- `SELECT 1 FROM (VALUES (1)) AS x` yields a nested Values `Scope` and no
+  physical tables.
+- SQLite ASCII identifier probes (SQLite 3.46.1) accepted `events` / `EVENTS` /
+  `"events"` / `"EVENTS"` against a lowercase `events` table.
+- Non-ASCII probes confirmed SQLite does **not** equate `straße`/`strasse`,
+  `café`/`CAFÉ`, `Σ`/`σ`, or `İ`/`i`, while ASCII case inside an otherwise
+  identical non-ASCII name (`Straße` vs `straße`) does match. Distinct
+  `"straße"` and `"strasse"` tables can coexist.
+
+Design: `scope_policy.authorize_physical_tables` after Slice 2 structure
+checks. Build a folded→canonical lookup from `physical_tables`. An empty
+inventory set is valid; empty or whitespace-padded inventory *entries* and
+ASCII-fold collisions raise `TypeError`. Caller-owned frozensets are not
+mutated. Traverse every scope once; skip nested `Scope` sources; authorize
+identifier `exp.Table` nodes; reject qualified tables (`qualified_table`) and
+non-identifier / empty-name tables (`unsupported_table_source`); reject
+unknown names (`unknown_table`). Canonical inventory spellings populate
+`referenced_tables`. Column inventories remain type-checked only.
+`referenced_columns` and `referenced_functions` stay empty.
+`original_sql` is never rewritten. The scope-policy pass reads SQLGlot nodes
+only and must not mutate the parsed AST; `normalized_sql` / fingerprint stay
+independent of canonical authorization.
+
+Identifier folding uses `fold_sqlite_identifier`: ASCII `A`–`Z` → `a`–`z`
+only, non-ASCII code points preserved, no Unicode normalization or
+`str.casefold()` / `.lower()`.
+
+Rejection precedence (first match wins):
+
+1. unsupported top-level root
+2. forbidden whole-tree construct
+3. invalid CTE query body
+4. recursive CTE
+5. parameterized SQL
+6. unsupported table-source kind
+7. qualified physical table
+8. unknown physical table
+
+TDD: red suite recorded **32 failed, 8 passed** before implementation
+(empty-FROM and some CTE-shadow/VALUES/literal/precedence paths already green
+from Slice 1–2). Existing Slice 1 “unknown tables accepted” test was updated
+to assert Slice 3 rejection; two Slice 2 alias tests that query `events` now
+pass an inventory.
+
+Mutations restored after focused failures: `find_all(exp.Table)` authority;
+`scope.tables` authority; source-key authorization; nested Scope as physical;
+skip nested scopes; allow unknown root/CTE/union-branch; strip qualifiers;
+case-sensitive matching; SQL spelling instead of canonical; aliases in
+`referenced_tables`; CTE names in `referenced_tables`; self-join alias
+tagging; accept TVF; populate columns/functions; replace `original_sql`;
+mutate AST identifiers; broad `except Exception` around traversal.
+
+Validation: SQL-policy 184, runtime 92, database 381, metadata 69, decision
+92, full suite 729; Ruff, format, mypy, lock, diff-check, secret scan, wheel
+metadata (`sqlglot==30.14.0`), installed-wheel probe, and supported offline
+builds. No provider calls and no SQLite execution in sql_policy. Deferred:
+Slice 4 column/star policy, function/date policy, authorizer, execution,
+QueryService, CLI, evaluation. Teaching docs under `docs/layers/` and
+`docs/learn-site/` remain untracked and untouched.
+
+### U2 Slice 3 closure-review corrections
+
+Independent closure review confirmed three defects (severity labels inflated;
+substance real):
+
+1. **ASCII-only folding.** Production had used `str.casefold()`, which
+   wrongly authorized `strasse` against inventory `straße` and equated other
+   non-ASCII pairs SQLite keeps distinct. Genuine red tests failed before the
+   fix. Replaced with `fold_sqlite_identifier` (ASCII A–Z translation only).
+2. **AST non-mutation / normalized-SQL isolation.** Scope authorization must
+   not rewrite identifiers in place. Added an internal render-before/after
+   assertion on `authorize_physical_tables` plus a public
+   `normalized_sql`/fingerprint test proving evidence stays the SQLGlot
+   rendering of the original parse (`SELECT 1 FROM EVENTS`), while
+   `referenced_tables` still returns inventory-canonical `events`.
+3. **Empty inventory regression.** Explicit coverage that empty
+   `physical_tables` accepts `SELECT 1` and rejects `FROM events`.
+
+Twelve required mutations were applied and restored with focused failures
+(casefold, `.lower()`, ß→ss collapse, case-sensitive ASCII, `table.this.set`,
+quoted in-place rewrite, remove internal AST assertion with production
+mutation, rewritten normalized SQL, rewritten fingerprint, reject empty
+inventory, allow tables under empty inventory, SQL spelling instead of
+canonical). Source hashes matched afterward.
+
+Validation after corrections: SQL-policy 195, runtime 92, database 381,
+metadata 69, decision 92, full suite 740; Ruff, format, mypy, lock,
+diff-check, secret scan, wheel metadata (`sqlglot==30.14.0`), installed-wheel
+probe outside the checkout, cached isolated `--offline` build, and
+`--offline --no-build-isolation` build. No provider calls and no SQLite
+execution in sql_policy. No Slice 4 behavior, authorizer, execution,
+QueryService, providers, CLI, rendering, or evaluation was added. Nothing was
+CLI, rendering, or evaluation was added. Teaching dirs `docs/layers/` and
+`docs/learn-site/` remain untracked and untouched. Independent closure
+re-review returned APPROVE; this material lands as
+`feat: authorize physical SQL table sources`.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–2 (parse foundation plus structure policy) are implemented and test-verified. Generated database files remain untracked local artifacts. Schema-aware AST authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–3 (parse foundation, structure policy, and physical-table authorization) are implemented and test-verified. Generated database files remain untracked local artifacts. Column/star/function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

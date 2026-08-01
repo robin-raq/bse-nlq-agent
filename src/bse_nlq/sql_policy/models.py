@@ -12,8 +12,9 @@ class ValidatedSql:
     ``original_sql`` is the caller input after outer whitespace trimming only.
     Later execution must run ``original_sql``, never ``normalized_sql``.
     ``normalized_sql`` is a deterministic SQLGlot SQLite rendering used only for
-    fingerprinting and comparison. Referenced-object collections may be empty
-    until later slices extract them.
+    fingerprinting and comparison. ``referenced_tables`` holds canonical
+    physical table names after Slice 3 authorization. Column and function
+    collections may remain empty until later slices.
     """
 
     original_sql: str

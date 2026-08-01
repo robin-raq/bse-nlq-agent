@@ -226,13 +226,12 @@ def test_output_immutable() -> None:
         result.referenced_tables.add("x")  # type: ignore[attr-defined]
 
 
-def test_slice1_does_not_authorize_unknown_tables() -> None:
-    # Inventories are accepted but Slice 1 must not reject on table names yet.
-    result = validate_sql(
-        "SELECT 1 FROM nonexistent_table",
-        physical_tables=frozenset({"events"}),
-        physical_columns=frozenset({("events", "id")}),
-        prompt_visible_columns=frozenset({("events", "id")}),
-    )
-    assert isinstance(result, ValidatedSql)
-    assert result.referenced_tables == frozenset()
+def test_slice3_rejects_unknown_physical_tables() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        validate_sql(
+            "SELECT 1 FROM nonexistent_table",
+            physical_tables=frozenset({"events"}),
+            physical_columns=frozenset({("events", "id")}),
+            prompt_visible_columns=frozenset({("events", "id")}),
+        )
+    assert exc_info.value.reason is SqlRejectionReason.UNKNOWN_TABLE

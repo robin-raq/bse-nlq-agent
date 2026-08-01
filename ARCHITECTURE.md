@@ -3,11 +3,12 @@
 > Approved target design. Schema, seed, semantic metadata, ModelDecision
 > validation, deterministic prompt construction, the persistent database
 > builder, and the read-only runtime factory are implemented; SQL-policy
-> Slices 1–2 (`bse_nlq.sql_policy`) cover single-statement
-> parse/normalize/fingerprint plus allowed roots, whole-tree forbidden
-> constructs, recursive-CTE rejection, and parameter rejection. Schema-aware
-> AST authorization, authorizer, progress/result limits, controlled execution,
-> provider adapters, QueryService, and the product CLI remain pending.
+> Slices 1–3 (`bse_nlq.sql_policy`) cover single-statement
+> parse/normalize/fingerprint, structure policy, and physical-table
+> authorization via SQLGlot `scope.sources` with canonical
+> `referenced_tables`. Column/star/function/date authorization, authorizer,
+> progress/result limits, controlled execution, provider adapters,
+> QueryService, and the product CLI remain pending.
 
 ## Principles
 
@@ -56,7 +57,7 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
-- `bse_nlq.sql_policy` — Slices 1–2: `validate_sql` / `ValidatedSql` with structure policy (no table/column authorization yet)
+- `bse_nlq.sql_policy` — Slices 1–3: `validate_sql` / `ValidatedSql` with structure policy and physical-table authorization (no column authorization yet)
 
 ## Model contract
 
@@ -122,8 +123,8 @@ after close.
 Remaining independent controls are still pending and must each be tested before
 model-generated SQL is executed:
 
-1. Schema-aware SQLGlot AST authorization (tables, columns, stars, functions,
-   dates) on top of Slices 1–2 in `bse_nlq.sql_policy`.
+1. Schema-aware SQLGlot AST authorization for columns, stars, functions, and
+   dates on top of Slices 1–3 in `bse_nlq.sql_policy`.
 2. Default-deny SQLite authorizer.
 3. Progress-handler instruction budget.
 4. Result-row / column caps and controlled execution.
@@ -134,26 +135,26 @@ input, preserves trimmed `original_sql` for later execution, fingerprints
 deterministic `normalized_sql`, accepts only `Select`/`Union` roots (including
 parenthesized SELECT and nonrecursive CTEs), requires every unwrapped CTE body
 to use those same approved query roots, default-denies other roots, rejects
-forbidden constructs anywhere in the tree, rejects recursive CTEs, and rejects
-parameters/`Placeholder`/`Parameter`/unquoted `$…` forms. It does
-**not** yet authorize tables or columns. Static policy uses the parsed SQLite
-AST, never regex or semicolon heuristics as the primary authority. Rejected
-SQL will expose `generated_sql` but leave `executed_sql` null. The complete
-SQL-safety foundation is not yet implemented.
+forbidden constructs anywhere in the tree, rejects recursive CTEs, rejects
+parameters/`Placeholder`/`Parameter`/unquoted `$…` forms, and authorizes
+physical tables from SQLGlot `scope.sources` against the caller-supplied
+`physical_tables` inventory. Canonical names are returned in
+`referenced_tables`. Nested `Scope` sources (CTEs/derived tables) are not
+physical tables; database/catalog qualifiers and non-identifier table sources
+(for example table-valued functions) are rejected. It does **not** yet
+authorize columns, stars, functions, or dates. Static policy uses the parsed
+SQLite AST, never regex or semicolon heuristics as the primary authority.
+Rejected SQL will expose `generated_sql` but leave `executed_sql` null. The
+complete SQL-safety foundation is not yet implemented.
 
-Slice 3 source authorization is locked to SQLGlot scope structure: only
-`scope.sources` classifies sources (`exp.Table` is physical; nested `Scope` is
-CTE/derived). `scope.tables`, raw `find_all(exp.Table)`, and `qualify()` are not
-authorization authorities; qualification may support analysis, while the
-application independently owns allowlists, exclusions, qualifiers, ambiguity,
-visibility, and functions. Unqualified names resolve at one scope level at a
-time: reject multiple local matches, bind one, and move outward only after zero
-matches. `COUNT(*)` is the sole allowed star shape; projection `*` and
-`alias.*` are rejected from the projection AST without SQLite expansion.
-Identifier matching is SQLite-compatible and case-insensitive, including for
-quoted identifiers, with canonical names supplied by application inventories;
-normalization is performed on a copy. No analysis rewrite replaces
-`original_sql`; `normalized_sql` remains evidence only.
+Physical-source classification uses only `scope.sources`: `exp.Table` is a
+physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw
+`find_all(exp.Table)`, and `qualify()` are not authorization authorities.
+Later column slices remain locked to local-ambiguity-first resolution,
+`COUNT(*)`-only stars, SQLite-compatible ASCII case-insensitive matching
+(non-ASCII code points preserved; no Unicode casefold) with
+inventory-canonical names, no rewrite of `original_sql`, and no in-place
+AST identifier mutation during authorization.
 
 ## Data and prompting
 

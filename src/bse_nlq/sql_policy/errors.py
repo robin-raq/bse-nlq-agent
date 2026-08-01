@@ -10,8 +10,9 @@ class SqlRejectionReason(StrEnum):
 
     Slice 1 uses ``empty_sql``, ``multiple_statements``, and ``parse_error``.
     Slice 2 adds ``unsupported_statement``, ``forbidden_construct``,
-    ``recursive_cte``, and ``parameterized_sql``. This is not a terminal-state
-    enum.
+    ``recursive_cte``, and ``parameterized_sql``. Slice 3 adds
+    ``unknown_table``, ``qualified_table``, and ``unsupported_table_source``.
+    This is not a terminal-state enum.
     """
 
     EMPTY_SQL = "empty_sql"
@@ -21,6 +22,9 @@ class SqlRejectionReason(StrEnum):
     FORBIDDEN_CONSTRUCT = "forbidden_construct"
     RECURSIVE_CTE = "recursive_cte"
     PARAMETERIZED_SQL = "parameterized_sql"
+    UNKNOWN_TABLE = "unknown_table"
+    QUALIFIED_TABLE = "qualified_table"
+    UNSUPPORTED_TABLE_SOURCE = "unsupported_table_source"
 
 
 class SqlPolicyError(Exception):

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from policy_test_helpers import validate
+from policy_test_helpers import EMPTY_COLUMNS, EMPTY_VISIBLE, validate
 
-from bse_nlq.sql_policy import SqlRejectedError, SqlRejectionReason, ValidatedSql
+from bse_nlq.sql_policy import (
+    SqlRejectedError,
+    SqlRejectionReason,
+    ValidatedSql,
+    validate_sql,
+)
 
 
 def test_literal_drop_string_not_forbidden() -> None:
@@ -125,7 +130,12 @@ def test_reachable_forbidden_nodes_inside_ctes_are_rejected(
     ids=("projection-alias", "table-alias", "replace-function-alias"),
 )
 def test_valid_aliases_remain_accepted(sql: str) -> None:
-    result = validate(sql)
+    result = validate_sql(
+        sql,
+        physical_tables=frozenset({"events"}),
+        physical_columns=EMPTY_COLUMNS,
+        prompt_visible_columns=EMPTY_VISIBLE,
+    )
     assert isinstance(result, ValidatedSql)
 
 
@@ -193,5 +203,10 @@ def test_multiple_ctes_one_recursive_rejected() -> None:
 
 
 def test_identifier_named_update_not_forbidden() -> None:
-    result = validate('SELECT "update" FROM events')
+    result = validate_sql(
+        'SELECT "update" FROM events',
+        physical_tables=frozenset({"events"}),
+        physical_columns=EMPTY_COLUMNS,
+        prompt_visible_columns=EMPTY_VISIBLE,
+    )
     assert isinstance(result, ValidatedSql)

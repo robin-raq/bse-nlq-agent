@@ -1,4 +1,4 @@
-"""Static SQL parsing, statement-shape, and Slice 2 structure validation."""
+"""Static SQL parsing, structure policy, and Slice 3 table authorization."""
 
 from __future__ import annotations
 
@@ -15,12 +15,18 @@ from bse_nlq.sql_policy.errors import (
     SqlRejectionReason,
 )
 from bse_nlq.sql_policy.models import ValidatedSql
+from bse_nlq.sql_policy.scope_policy import authorize_physical_tables
 from bse_nlq.sql_policy.structure import apply_structure_policy
 
 
 @dataclass(frozen=True, slots=True)
 class _PolicyInventories:
-    """Immutable inventory bag accepted by ``validate_sql`` (Slice 1 unused)."""
+    """Immutable inventory bag for ``validate_sql``.
+
+    Slice 3 uses ``physical_tables`` for physical-source authorization.
+    ``physical_columns`` and ``prompt_visible_columns`` remain type-validated
+    for later slices.
+    """
 
     physical_tables: frozenset[str]
     physical_columns: frozenset[tuple[str, str]]
@@ -34,11 +40,11 @@ def validate_sql(
     physical_columns: frozenset[tuple[str, str]],
     prompt_visible_columns: frozenset[tuple[str, str]],
 ) -> ValidatedSql:
-    """Parse and apply Slice 1 shape plus Slice 2 structure policy.
+    """Parse, apply structure policy, and authorize physical table sources.
 
-    Accepts immutable physical/visible inventories for later authorization
-    slices. Verifies inventory shapes but does not authorize tables or
-    columns, open SQLite, or execute SQL.
+    Accepts immutable inventories. ``physical_tables`` is authoritative for
+    Slice 3 physical-source allowlisting. Column inventories are type-checked
+    only. Does not open SQLite or execute SQL.
     """
     if not isinstance(sql, str):
         raise TypeError("sql must be str")
@@ -47,8 +53,6 @@ def validate_sql(
         physical_columns=physical_columns,
         prompt_visible_columns=prompt_visible_columns,
     )
-    # Slice 1 accepts inventories for the stable public signature only.
-    _ = inventories
 
     original_sql = sql.strip()
     if not original_sql:
@@ -79,13 +83,16 @@ def validate_sql(
 
     expression = meaningful[0]
     apply_structure_policy(expression)
+    referenced_tables = authorize_physical_tables(
+        expression, physical_tables=inventories.physical_tables
+    )
     normalized_sql = _normalize(expression)
     fingerprint = hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
     return ValidatedSql(
         original_sql=original_sql,
         normalized_sql=normalized_sql,
         fingerprint=fingerprint,
-        referenced_tables=frozenset(),
+        referenced_tables=referenced_tables,
         referenced_columns=frozenset(),
         referenced_functions=frozenset(),
     )

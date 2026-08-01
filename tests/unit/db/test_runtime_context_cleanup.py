@@ -178,6 +178,60 @@ def test_close_failure_is_retryable(published_db: Path) -> None:
     assert db.closed is True
 
 
+@pytest.mark.parametrize(
+    "defect",
+    (
+        RuntimeError("internal close bug"),
+        MemoryError("resource exhaustion"),
+    ),
+    ids=("RuntimeError", "MemoryError"),
+)
+def test_close_programming_and_resource_failures_propagate_unchanged(
+    published_db: Path,
+    defect: BaseException,
+) -> None:
+    db = open_readonly_database(published_db)
+    real_connection = db._raw_connection
+    stub = _FailingCloseConnection(defect)
+    db._raw_connection = stub  # type: ignore[assignment]
+    try:
+        with pytest.raises(type(defect)) as exc_info:
+            db.close()
+        assert exc_info.value is defect
+        assert not isinstance(exc_info.value, DatabaseRuntimeError)
+        assert stub.close_calls == 1
+        assert db.closed is False
+        assert db.metadata is not None
+    finally:
+        db._raw_connection = real_connection  # type: ignore[assignment]
+        db.close()
+    assert db.closed is True
+
+
+@pytest.mark.parametrize(
+    "control_flow",
+    (SystemExit(3), GeneratorExit()),
+    ids=("SystemExit", "GeneratorExit"),
+)
+def test_control_flow_exceptions_from_close_propagate_unchanged(
+    published_db: Path,
+    control_flow: BaseException,
+) -> None:
+    db = open_readonly_database(published_db)
+    real_connection = db._raw_connection
+    stub = _FailingCloseConnection(control_flow)
+    db._raw_connection = stub  # type: ignore[assignment]
+    try:
+        with pytest.raises(type(control_flow)) as exc_info:
+            db.close()
+        assert exc_info.value is control_flow
+        assert stub.close_calls == 1
+        assert db.closed is False
+    finally:
+        db._raw_connection = real_connection  # type: ignore[assignment]
+        db.close()
+
+
 def test_keyboard_interrupt_from_close_propagates_unwrapped(
     published_db: Path,
 ) -> None:

@@ -101,15 +101,15 @@ class ReadOnlyDatabase:
     def close(self) -> None:
         """Close the owned connection; idempotent after a successful close.
 
-        A failed close raises ``DatabaseRuntimeError`` and leaves the wrapper
-        open, so the caller is never told closure succeeded while the
-        underlying connection and its descriptor remain live.
+        A SQLite close failure raises ``DatabaseRuntimeError`` and leaves the
+        wrapper open. Programming, resource, and control-flow failures
+        propagate unchanged and also leave the wrapper open.
         """
         if self._closed:
             return
         try:
             self._raw_connection.close()
-        except Exception as error:
+        except sqlite3.Error as error:
             raise DatabaseRuntimeError(
                 "failed to close read-only database connection"
             ) from error

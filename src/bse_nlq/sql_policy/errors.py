@@ -9,13 +9,18 @@ class SqlRejectionReason(StrEnum):
     """Closed reasons for SQL-policy failures in the current U2 slices.
 
     Slice 1 uses ``empty_sql``, ``multiple_statements``, and ``parse_error``.
-    Later slices may add further approved values; this is not a terminal-state
+    Slice 2 adds ``unsupported_statement``, ``forbidden_construct``,
+    ``recursive_cte``, and ``parameterized_sql``. This is not a terminal-state
     enum.
     """
 
     EMPTY_SQL = "empty_sql"
     MULTIPLE_STATEMENTS = "multiple_statements"
     PARSE_ERROR = "parse_error"
+    UNSUPPORTED_STATEMENT = "unsupported_statement"
+    FORBIDDEN_CONSTRUCT = "forbidden_construct"
+    RECURSIVE_CTE = "recursive_cte"
+    PARAMETERIZED_SQL = "parameterized_sql"
 
 
 class SqlPolicyError(Exception):

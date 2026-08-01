@@ -23,7 +23,8 @@ AI assisted with:
 - translating frozen business meaning from `docs/planning/schema-design.md` and `docs/planning/decisions.md` into the structured JSON semantic metadata sidecar and typed load/validate/reconcile API, with schema-reconciliation and leak checks covered by offline tests; and
 - translating the frozen ModelDecision contract and prompt architecture into typed validation, deterministic JSON Schema, schema/semantic rendering, and prompt construction, with offline tests for determinism, leakage, malformed output, and injection-boundary delimiting; and
 - test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage; and
-- test-first implementation of U2 Slice 1 SQL-policy parsing (`bse_nlq.sql_policy.validate_sql` → immutable `ValidatedSql`), including SQLGlot probes, single-statement enforcement, fingerprinting, ten mutation checks, and installed-wheel import without SQLite execution.
+- test-first implementation of U2 Slice 1 SQL-policy parsing (`bse_nlq.sql_policy.validate_sql` → immutable `ValidatedSql`), including SQLGlot probes, single-statement enforcement, fingerprinting, ten mutation checks, and installed-wheel import without SQLite execution; and
+- test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -333,10 +334,64 @@ use for validation itself. Deferred: Slice 2–6
 root/forbidden/parameter/table/column/star/function/date policy, authorizer,
 execution, QueryService, terminal-state mapping.
 
+## U2 Slice 2 — roots, forbidden constructs, recursive CTEs, parameters
+
+Offline probes against installed SQLGlot **30.14.0** established:
+
+- Roots: `Select`; `Union` (`distinct=True` for UNION, `False` for UNION ALL);
+  `Intersect`; `Except`; `Values`; parenthesized `(SELECT …)` as `Subquery`
+  wrapping `Select`; DML/DDL as typed nodes (`Insert`, `Update`, `Delete`,
+  `Create`, `Drop`, `Alter`, `TruncateTable`, `Merge`, `Pragma`, `Attach`,
+  `Detach`, `Analyze`, `Transaction`, `Commit`, `Rollback`, `Grant`,
+  `Revoke`); `VACUUM` and SQLite `REPLACE INTO` as `Command` fallbacks;
+  `SAVEPOINT`/`RELEASE` misparsed as `Alias` roots (still unsupported).
+- Nested DML is representable inside CTE bodies (`WITH x AS (INSERT…)` /
+  `DELETE…` / `PRAGMA…`) while the outer root remains `Select`.
+- Recursive CTEs set `With.args["recursive"] = True`; ordinary CTEs are
+  `False`.
+- Parameters: `?` and `:name` → `Placeholder`; `@name` → `Parameter`; `$1` /
+  `$name` → unquoted `Column`/`Identifier` whose name starts with `$`;
+  quoted `"$1"` is a quoted identifier, not a parameter; string literals
+  such as `'$1'` / `'?'` / `':value'` / `'DROP TABLE events'` remain
+  `Literal` only.
+
+Design: `structure.apply_structure_policy` after Slice 1 single-statement
+selection. Allowed roots after unwrapping `Subquery`: `Select` and `Union`
+only (covers nonrecursive CTEs and UNION/UNION ALL). Forbidden set is an
+explicit tuple of SQLGlot expression classes (not `exp.Replace` string
+function). Precedence: unsupported root → forbidden construct → recursive
+CTE → parameterized SQL. New rejection reasons:
+`unsupported_statement`, `forbidden_construct`, `recursive_cte`,
+`parameterized_sql`.
+
+TDD: red suite before implementation recorded **68 failed, 18 passed** on
+roots/forbidden/parameters files (accept paths already green from Slice 1;
+rejection paths genuinely red). Nested DELETE/PRAGMA CTE cases were added
+so mutations that remove those classes from the forbidden set are observable
+(root-only DELETE/PRAGMA stay `unsupported_statement` by precedence).
+Shared test helper was named `policy_test_helpers.py` after a full-suite
+collection collision with `tests/unit/decision/helpers.py` under bare
+`from helpers import …`.
+
+Sixteen mutations each failed a targeted test and restored to matching
+SHA-256 digests for `structure.py` /
+`d6d5347be5872a2c9739bc12947938ac8d71c11dba82c949763bcd4d28b16d82` and
+`errors.py` /
+`9846bea3ccb2fe5444575e99492e15d144723ef0129cd6c50ed8d19d9bc197b7`:
+allow Values/Intersect/Except roots; remove Delete/Pragma from forbidden
+(nested CTE tests); root-only forbidden walk; allow recursive CTEs; allow
+`?`/`:name`/`@name`/`$1`; reject parameter-like literals; regex parameter
+detection; reverse precedence; raise `InvalidSqlError` for unsupported
+roots; drop `PARAMETERIZED_SQL` enum member.
+
+Deferred: Slice 3+ table/column/star/function/date authorization, authorizer,
+execution, QueryService, terminal-state mapping. No provider or network
+calls for this slice validation.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and Slice 1 SQL-policy parsing foundation are implemented and test-verified. Generated database files remain untracked local artifacts. Full AST authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–2 (parse foundation plus structure policy) are implemented and test-verified. Generated database files remain untracked local artifacts. Schema-aware AST authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

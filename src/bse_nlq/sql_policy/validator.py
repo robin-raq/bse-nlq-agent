@@ -1,4 +1,4 @@
-"""Static SQL parsing and Slice 1 single-statement validation."""
+"""Static SQL parsing, statement-shape, and Slice 2 structure validation."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from bse_nlq.sql_policy.errors import (
     SqlRejectionReason,
 )
 from bse_nlq.sql_policy.models import ValidatedSql
+from bse_nlq.sql_policy.structure import apply_structure_policy
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,10 +34,10 @@ def validate_sql(
     physical_columns: frozenset[tuple[str, str]],
     prompt_visible_columns: frozenset[tuple[str, str]],
 ) -> ValidatedSql:
-    """Parse and apply Slice 1 statement-shape policy.
+    """Parse and apply Slice 1 shape plus Slice 2 structure policy.
 
     Accepts immutable physical/visible inventories for later authorization
-    slices. Slice 1 verifies their shapes and does not authorize tables or
+    slices. Verifies inventory shapes but does not authorize tables or
     columns, open SQLite, or execute SQL.
     """
     if not isinstance(sql, str):
@@ -77,6 +78,7 @@ def validate_sql(
         )
 
     expression = meaningful[0]
+    apply_structure_policy(expression)
     normalized_sql = _normalize(expression)
     fingerprint = hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
     return ValidatedSql(

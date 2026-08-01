@@ -1,10 +1,14 @@
-"""Static SQL policy: parse, validate shape, and return immutable ValidatedSql.
+"""Static SQL policy: parse, validate shape/structure, return ValidatedSql.
 
-Slice 1 provides public imports, immutable models, SQL-policy errors, SQLGlot
-SQLite parsing, outer-trim, empty/semicolon rejection, exactly-one meaningful
-statement enforcement, deterministic normalization, and fingerprinting. Table,
-column, star, function, date, parameter, and forbidden-construct policy remain
-later slices. This package does not open SQLite or execute SQL.
+Slice 1: public imports, immutable models, SQL-policy errors, SQLGlot SQLite
+parsing, outer-trim, empty/semicolon rejection, exactly-one meaningful
+statement, deterministic normalization, and fingerprinting.
+
+Slice 2: allowed SELECT/UNION roots, whole-tree forbidden-construct rejection,
+recursive-CTE rejection, and parameter/placeholder rejection.
+
+Table, column, star, function, and date authorization remain later slices.
+This package does not open SQLite or execute SQL.
 """
 
 from __future__ import annotations

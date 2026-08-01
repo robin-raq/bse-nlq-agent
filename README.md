@@ -6,12 +6,13 @@ A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI Eng
 > loader, JSON semantic metadata sidecar, strict ModelDecision validation,
 > deterministic prompt construction, a persistent database builder, a safe
 > read-only runtime open (`open_readonly_database` / `ReadOnlyDatabase`), and
-> the initial SQL-policy parsing foundation (`validate_sql` / `ValidatedSql`
-> for single-statement parse/normalize/fingerprint) are implemented and
-> verified offline. Full AST authorization, authorizer/limits, query
-> execution, the NLQ service/CLI, and final evaluation remain pending. There
-> is no public raw-SQL API and no product ask command. Model-generated SQL has
-> not been tested. The application is not runnable end-to-end.
+> SQL-policy Slices 1–2 (`validate_sql` / `ValidatedSql`: parse/normalize/
+> fingerprint plus allowed SELECT/UNION roots, whole-tree forbidden-construct
+> rejection, recursive-CTE rejection, and parameter rejection) are implemented
+> and verified offline. Schema-aware AST authorization, authorizer/limits,
+> query execution, the NLQ service/CLI, and final evaluation remain pending.
+> There is no public raw-SQL API and no product ask command. Model-generated
+> SQL has not been tested. The application is not runnable end-to-end.
 
 
 ## Planned approach
@@ -43,8 +44,8 @@ Model output is treated as untrusted input. The planned execution boundary combi
 
 - a read-only database connection (**implemented** as `open_readonly_database`);
 - SQLite `query_only` (**implemented** and verified on that connection);
-- parsed-AST policy checks (**Slice 1 parsing foundation implemented**; full
-  authorization pending);
+- parsed-AST policy checks (**Slices 1–2 structure policy implemented**;
+  schema-aware authorization pending);
 - a default-deny SQLite authorizer (pending);
 - an execution instruction budget (pending); and
 - a result-row cap (pending).

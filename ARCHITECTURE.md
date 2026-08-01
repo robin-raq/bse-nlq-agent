@@ -2,7 +2,9 @@
 
 > Approved target design. Schema, seed, semantic metadata, ModelDecision
 > validation, deterministic prompt construction, the persistent database
-> builder, and the read-only runtime factory are implemented; SQLGlot policy,
+> builder, and the read-only runtime factory are implemented; the initial
+> SQL-policy parsing foundation (`bse_nlq.sql_policy` Slice 1) exists for
+> single-statement parse/normalize/fingerprint. Full AST authorization,
 > authorizer, progress/result limits, controlled execution, provider adapters,
 > QueryService, and the product CLI remain pending.
 
@@ -53,6 +55,7 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
+- `bse_nlq.sql_policy` — Slice 1 parsing foundation: `validate_sql` / `ValidatedSql` (no table/column authorization yet)
 
 ## Model contract
 
@@ -117,15 +120,21 @@ after close.
 Remaining independent controls are still pending and must each be tested before
 model-generated SQL is executed:
 
-1. SQLGlot AST policy producing immutable `ValidatedSql`.
+1. Full SQLGlot AST policy (allowed roots, forbidden constructs, parameters,
+   tables, columns, stars, functions, dates) on top of the Slice 1 parsing
+   foundation in `bse_nlq.sql_policy`.
 2. Default-deny SQLite authorizer.
 3. Progress-handler instruction budget.
 4. Result-row / column caps and controlled execution.
 
-Static policy will use the parsed SQLite AST and introspected schema, never
-regex or semicolon heuristics. Rejected SQL will expose `generated_sql` but
-leave `executed_sql` null. The complete SQL-safety foundation is not yet
-implemented.
+The initial SQL-policy package (`validate_sql` → immutable `ValidatedSql`)
+parses with SQLGlot's SQLite dialect, rejects empty/semicolon-only and
+multi-statement input, preserves trimmed `original_sql` for later execution,
+and fingerprints deterministic `normalized_sql`. It does **not** yet authorize
+tables/columns or reject forbidden constructs. Static policy uses the parsed
+SQLite AST and introspected schema, never regex or semicolon heuristics.
+Rejected SQL will expose `generated_sql` but leave `executed_sql` null. The
+complete SQL-safety foundation is not yet implemented.
 
 ## Data and prompting
 

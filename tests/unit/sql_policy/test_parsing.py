@@ -1,0 +1,238 @@
+"""SQLGlot parsing, single-statement, normalize, and fingerprint Slice 1 tests."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+
+import pytest
+from sqlglot.errors import ParseError
+
+from bse_nlq.sql_policy import (
+    InvalidSqlError,
+    SqlRejectedError,
+    SqlRejectionReason,
+    ValidatedSql,
+    validate_sql,
+)
+
+EMPTY_TABLES: frozenset[str] = frozenset()
+EMPTY_COLUMNS: frozenset[tuple[str, str]] = frozenset()
+EMPTY_VISIBLE: frozenset[tuple[str, str]] = frozenset()
+
+
+def _validate(sql: object) -> ValidatedSql:
+    return validate_sql(
+        sql,  # type: ignore[arg-type]
+        physical_tables=EMPTY_TABLES,
+        physical_columns=EMPTY_COLUMNS,
+        prompt_visible_columns=EMPTY_VISIBLE,
+    )
+
+
+def test_valid_select_one() -> None:
+    result = _validate("SELECT 1")
+    assert isinstance(result, ValidatedSql)
+    assert result.original_sql == "SELECT 1"
+    assert result.normalized_sql == "SELECT 1"
+    assert result.fingerprint == hashlib.sha256(b"SELECT 1").hexdigest()
+    assert isinstance(result.referenced_tables, frozenset)
+    assert isinstance(result.referenced_columns, frozenset)
+    assert isinstance(result.referenced_functions, frozenset)
+    assert result.referenced_tables == frozenset()
+    assert result.referenced_columns == frozenset()
+    assert result.referenced_functions == frozenset()
+
+
+def test_trailing_semicolon_single_statement() -> None:
+    result = _validate("SELECT 1;")
+    assert result.original_sql == "SELECT 1;"
+    assert result.normalized_sql == "SELECT 1"
+
+
+def test_outer_whitespace_trimmed_for_original_sql() -> None:
+    result = _validate("  SELECT 1;  ")
+    assert result.original_sql == "SELECT 1;"
+    assert result.normalized_sql == "SELECT 1"
+
+
+def test_internal_whitespace_preserved_in_original_sql() -> None:
+    raw = "SELECT\n  1"
+    result = _validate(f"  {raw}  ")
+    assert result.original_sql == raw
+
+
+def test_empty_sql_rejected() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate("")
+    assert exc_info.value.reason is SqlRejectionReason.EMPTY_SQL
+
+
+def test_whitespace_only_rejected() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate("   \n\t  ")
+    assert exc_info.value.reason is SqlRejectionReason.EMPTY_SQL
+
+
+def test_semicolon_only_rejected() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate(";")
+    assert exc_info.value.reason is SqlRejectionReason.EMPTY_SQL
+
+
+def test_multiple_semicolons_only_rejected() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate(";;;")
+    assert exc_info.value.reason is SqlRejectionReason.EMPTY_SQL
+
+
+def test_multiple_statements_rejected() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate("SELECT 1; SELECT 2;")
+    assert exc_info.value.reason is SqlRejectionReason.MULTIPLE_STATEMENTS
+
+
+def test_statement_followed_by_empty_semicolons_accepted() -> None:
+    result = _validate("SELECT 1;;;")
+    assert result.original_sql == "SELECT 1;;;"
+    assert result.normalized_sql == "SELECT 1"
+
+
+def test_bare_select_keyword_accepted_as_single_parsed_statement() -> None:
+    # SQLGlot 30.14.0 accepts bare SELECT without raising; Slice 2 owns root policy.
+    result = _validate("SELECT")
+    assert result.original_sql == "SELECT"
+    assert result.normalized_sql == "SELECT"
+
+
+def test_inline_comment_preserved_in_original_stripped_in_normalized() -> None:
+    result = _validate("SELECT /* comment */ 1")
+    assert result.original_sql == "SELECT /* comment */ 1"
+    assert result.normalized_sql == "SELECT 1"
+    assert result.fingerprint == hashlib.sha256(b"SELECT 1").hexdigest()
+
+
+def test_leading_comment_preserved_in_original() -> None:
+    sql = "-- leading comment\nSELECT 1"
+    result = _validate(sql)
+    assert result.original_sql == sql
+    assert result.normalized_sql == "SELECT 1"
+
+
+def test_parse_error_becomes_invalid_sql_error_with_cause() -> None:
+    with pytest.raises(InvalidSqlError) as exc_info:
+        _validate("SELECT FROM")
+    err = exc_info.value
+    assert err.reason is SqlRejectionReason.PARSE_ERROR
+    assert isinstance(err.__cause__, ParseError)
+    message = err.args[0] if err.args else ""
+    assert isinstance(message, str)
+    assert message
+    assert len(message) < 200
+    # Public message must not dump the full ANSI-colored parser dump.
+    assert "\x1b[" not in message
+
+
+def test_fingerprint_is_64_lowercase_hex() -> None:
+    result = _validate("SELECT 1")
+    assert re.fullmatch(r"[0-9a-f]{64}", result.fingerprint)
+
+
+def test_casing_and_whitespace_normalize_consistently() -> None:
+    a = _validate("select 1")
+    b = _validate("  SELECT   1  ")
+    assert a.normalized_sql == b.normalized_sql == "SELECT 1"
+    assert a.fingerprint == b.fingerprint
+    assert a.original_sql == "select 1"
+    assert b.original_sql == "SELECT   1"
+
+
+def test_structurally_different_statements_differ_in_fingerprint() -> None:
+    a = _validate("SELECT 1")
+    b = _validate("SELECT 2")
+    assert a.fingerprint != b.fingerprint
+    assert a.normalized_sql != b.normalized_sql
+
+
+def test_original_sql_never_replaced_by_normalized() -> None:
+    result = _validate("select /* keep */ 1")
+    assert result.original_sql == "select /* keep */ 1"
+    assert result.normalized_sql == "SELECT 1"
+    assert result.original_sql != result.normalized_sql
+
+
+def test_non_string_input_raises_type_error() -> None:
+    with pytest.raises(TypeError):
+        _validate(123)
+    with pytest.raises(TypeError):
+        _validate(b"SELECT 1")
+
+
+def test_inventories_must_be_frozensets() -> None:
+    with pytest.raises(TypeError):
+        validate_sql(
+            "SELECT 1",
+            physical_tables={"events"},  # type: ignore[arg-type]
+            physical_columns=EMPTY_COLUMNS,
+            prompt_visible_columns=EMPTY_VISIBLE,
+        )
+    with pytest.raises(TypeError):
+        validate_sql(
+            "SELECT 1",
+            physical_tables=EMPTY_TABLES,
+            physical_columns={("events", "id")},  # type: ignore[arg-type]
+            prompt_visible_columns=EMPTY_VISIBLE,
+        )
+
+
+def test_inventories_are_not_mutated() -> None:
+    tables = frozenset({"events"})
+    columns = frozenset({("events", "id")})
+    visible = frozenset({("events", "id")})
+    validate_sql(
+        "SELECT 1",
+        physical_tables=tables,
+        physical_columns=columns,
+        prompt_visible_columns=visible,
+    )
+    assert tables == frozenset({"events"})
+    assert columns == frozenset({("events", "id")})
+    assert visible == frozenset({("events", "id")})
+
+
+def test_input_string_is_not_mutated() -> None:
+    sql = "  SELECT 1  "
+    before = sql
+    _validate(sql)
+    assert sql == before
+
+
+def test_repeated_validation_equal_and_independent() -> None:
+    first = _validate("SELECT 1")
+    second = _validate("SELECT 1")
+    assert first == second
+    assert first is not second
+    assert isinstance(first.referenced_tables, frozenset)
+    assert isinstance(second.referenced_tables, frozenset)
+
+
+def test_output_immutable() -> None:
+    from dataclasses import FrozenInstanceError
+
+    result = _validate("SELECT 1")
+    with pytest.raises(FrozenInstanceError):
+        result.normalized_sql = "SELECT 2"  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        result.referenced_tables.add("x")  # type: ignore[attr-defined]
+
+
+def test_slice1_does_not_authorize_unknown_tables() -> None:
+    # Inventories are accepted but Slice 1 must not reject on table names yet.
+    result = validate_sql(
+        "SELECT 1 FROM nonexistent_table",
+        physical_tables=frozenset({"events"}),
+        physical_columns=frozenset({("events", "id")}),
+        prompt_visible_columns=frozenset({("events", "id")}),
+    )
+    assert isinstance(result, ValidatedSql)
+    assert result.referenced_tables == frozenset()

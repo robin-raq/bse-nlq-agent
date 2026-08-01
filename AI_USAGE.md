@@ -22,7 +22,8 @@ AI assisted with:
 - test-first implementation of the deterministic seed loader, literal transcription from the tracked manifest, invariant/reconciliation/anchor SQL, and analytical trap regressions;
 - translating frozen business meaning from `docs/planning/schema-design.md` and `docs/planning/decisions.md` into the structured JSON semantic metadata sidecar and typed load/validate/reconcile API, with schema-reconciliation and leak checks covered by offline tests; and
 - translating the frozen ModelDecision contract and prompt architecture into typed validation, deterministic JSON Schema, schema/semantic rendering, and prompt construction, with offline tests for determinism, leakage, malformed output, and injection-boundary delimiting; and
-- test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage.
+- test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage; and
+- test-first implementation of U2 Slice 1 SQL-policy parsing (`bse_nlq.sql_policy.validate_sql` → immutable `ValidatedSql`), including SQLGlot probes, single-statement enforcement, fingerprinting, ten mutation checks, and installed-wheel import without SQLite execution.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -286,10 +287,56 @@ validation, authorizer, progress handler, executor, `QueryService`, provider
 adapter, CLI, observability, or evaluation path was added; U2–U5 remain
 deferred and no live provider request was made.
 
+## U2 Slice 1 — SQL-policy parsing foundation
+
+Offline probes against installed SQLGlot **30.14.0** established:
+
+- `sqlglot.parse(sql, read="sqlite")` returns `None` entries for empty
+  statements (including `;` / `;;;` and trailing empty semis after a real
+  statement);
+- empty / whitespace-only inputs parse as `[None]` without raising;
+- multi-statement input yields multiple non-`None` expressions;
+- `ParseError` (`sqlglot.errors.ParseError`) is raised for true syntax
+  failures such as `SELECT FROM` (default error level);
+- bare `SELECT` is accepted as a `Select` without raising (root policy is
+  Slice 2);
+- deterministic render: `expression.sql(dialect="sqlite", comments=False)`
+  uppercases keywords, collapses insignificant whitespace, and strips
+  comments so comment-bearing and comment-free forms can share a fingerprint
+  when SQLGlot removes comments.
+
+Public API decision: package `bse_nlq.sql_policy` with `validate_sql(...) ->
+ValidatedSql`, accepting immutable inventory frozensets for later
+authorization without coupling to `ReadOnlyDatabase` or opening SQLite.
+Immutable model decision: frozen slotted `ValidatedSql` with field
+`original_sql` (not `sql`) — outer-trim only; later execution must run
+`original_sql`, never `normalized_sql`. Fingerprint is SHA-256 of UTF-8
+`normalized_sql`. Slice 1 referenced-object sets are empty frozensets.
+Errors: `SqlPolicyError` → `InvalidSqlError` (parse; reason `parse_error`,
+cause preserved) / `SqlRejectedError` (policy; reasons `empty_sql`,
+`multiple_statements`). Non-string `sql` raises `TypeError` (documented;
+no silent `str(...)` coercion). Inventories that are not the expected
+frozenset shapes raise `TypeError`.
+
+TDD: red import/model/parsing tests failed with `ImportError` before the
+package existed. Ten mutations each failed their target tests and were
+restored to matching SHA-256 digests (empty rejection removed; raw parser
+list length; permit two statements; semicolon-split instead of SQLGlot;
+mutable sets; unfrozen dataclass; fingerprint from `original_sql`;
+`original_sql` replaced by normalized; swallow parse cause; export
+`_normalize` via `__all__`). Validation: `tests/unit/sql_policy` (32),
+metadata (69), runtime (88), decision (92), full suite (571), `ruff check .`,
+`ruff format --check .`, `mypy src`, `uv lock --check`, `git diff --check`,
+tracked/untracked secret scan clean, wheel build, and installed-wheel probe
+of `validate_sql("SELECT 1")` with no SQLite connect. No provider or network
+use for validation itself. Deferred: Slice 2–6
+root/forbidden/parameter/table/column/star/function/date policy, authorizer,
+execution, QueryService, terminal-state mapping.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, and read-only runtime database factory are implemented and test-verified. Generated database files remain untracked local artifacts. No query service, SQL safety validator beyond the runtime open boundary, product CLI, provider integration for SQL quality, or model-quality evaluation is complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and Slice 1 SQL-policy parsing foundation are implemented and test-verified. Generated database files remain untracked local artifacts. Full AST authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

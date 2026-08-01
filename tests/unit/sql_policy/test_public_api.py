@@ -16,6 +16,15 @@ from bse_nlq.sql_policy import (
     validate_sql,
 )
 
+EXPECTED_PUBLIC_EXPORTS = {
+    "InvalidSqlError",
+    "SqlPolicyError",
+    "SqlRejectedError",
+    "SqlRejectionReason",
+    "ValidatedSql",
+    "validate_sql",
+}
+
 
 def test_public_symbols_are_importable() -> None:
     assert callable(validate_sql)
@@ -30,15 +39,7 @@ def test_public_all_exports_only_intended_symbols() -> None:
     package = importlib.import_module("bse_nlq.sql_policy")
     assert hasattr(package, "__all__")
     exported = set(package.__all__)
-    required = {
-        "InvalidSqlError",
-        "SqlPolicyError",
-        "SqlRejectedError",
-        "SqlRejectionReason",
-        "ValidatedSql",
-        "validate_sql",
-    }
-    assert required <= exported
+    assert exported == EXPECTED_PUBLIC_EXPORTS
     for name in exported:
         assert not name.startswith("_"), name
 

@@ -3,7 +3,7 @@
 Precedence (first match wins):
 
 1. unsupported root query family
-2. whole-tree forbidden construct
+2. forbidden construct (whole-tree node, then unsupported CTE query body)
 3. recursive CTE
 4. parameterized SQL
 
@@ -41,11 +41,14 @@ _FORBIDDEN_NODE_TYPES: tuple[type[Expr], ...] = (
     exp.Revoke,
 )
 
+_APPROVED_QUERY_ROOT_TYPES: tuple[type[Expr], ...] = (exp.Select, exp.Union)
+
 
 def apply_structure_policy(expression: Expr) -> None:
-    """Apply Slice 2 root / forbidden / recursive / parameter checks."""
+    """Apply Slice 2 root / nested structure / recursive / parameter checks."""
     _reject_unsupported_root(expression)
     _reject_forbidden_constructs(expression)
+    _reject_unsupported_cte_bodies(expression)
     _reject_recursive_ctes(expression)
     _reject_parameters(expression)
 
@@ -59,7 +62,7 @@ def _unwrap_subquery_root(expression: Expr) -> Expr:
 
 def _reject_unsupported_root(expression: Expr) -> None:
     root = _unwrap_subquery_root(expression)
-    if isinstance(root, (exp.Select, exp.Union)):
+    if isinstance(root, _APPROVED_QUERY_ROOT_TYPES):
         return
     raise SqlRejectedError(
         f"Unsupported SQL statement root: {type(root).__name__}",
@@ -72,6 +75,27 @@ def _reject_forbidden_constructs(expression: Expr) -> None:
         if isinstance(node, _FORBIDDEN_NODE_TYPES):
             raise SqlRejectedError(
                 f"Forbidden SQL construct: {type(node).__name__}",
+                reason=SqlRejectionReason.FORBIDDEN_CONSTRUCT,
+            )
+
+
+def _reject_unsupported_cte_bodies(expression: Expr) -> None:
+    """Require every CTE body to use the same approved query families.
+
+    SQLGlot can parse unsupported statement-like text such as ``SAVEPOINT y``
+    as an alias expression, and it rewrites a ``VALUES`` CTE into a ``Select``
+    containing a ``Values`` node. Check both the unwrapped body root and that
+    rewrite explicitly without rejecting ordinary aliases elsewhere.
+    """
+    for node in expression.walk():
+        if not isinstance(node, exp.CTE):
+            continue
+        body = _unwrap_subquery_root(node.this)
+        if not isinstance(body, _APPROVED_QUERY_ROOT_TYPES) or any(
+            isinstance(descendant, exp.Values) for descendant in body.walk()
+        ):
+            raise SqlRejectedError(
+                f"Forbidden CTE query body: {type(body).__name__}",
                 reason=SqlRejectionReason.FORBIDDEN_CONSTRUCT,
             )
 

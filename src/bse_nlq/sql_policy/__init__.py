@@ -4,8 +4,9 @@ Slice 1: public imports, immutable models, SQL-policy errors, SQLGlot SQLite
 parsing, outer-trim, empty/semicolon rejection, exactly-one meaningful
 statement, deterministic normalization, and fingerprinting.
 
-Slice 2: allowed SELECT/UNION roots, whole-tree forbidden-construct rejection,
-recursive-CTE rejection, and parameter/placeholder rejection.
+Slice 2: allowed SELECT/UNION roots and CTE bodies, whole-tree
+forbidden-construct rejection, recursive-CTE rejection, and
+parameter/placeholder rejection.
 
 Table, column, star, function, and date authorization remain later slices.
 This package does not open SQLite or execute SQL.

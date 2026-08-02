@@ -9,8 +9,11 @@
 > anchors, I-1 through I-8, and the published reconciliations have been executed
 > successfully against the seeded in-memory database. The semantic metadata
 > sidecar is implemented at `src/bse_nlq/metadata/schema.json` with
-> `load_semantic_metadata`. The persistent application database artifact remains
-> pending.
+> `load_semantic_metadata`. The persistent application database builder is
+> implemented by `build_database`, including deterministic artifact validation
+> and publication. Runtime read-only opening is implemented by
+> `open_readonly_database`; SQL policy, query execution, and product integration
+> remain separate later work.
 >
 > Rationale and rejected alternatives are not repeated here. `decisions.md` owns
 > the decision record; `ARCHITECTURE.md` owns the system contract.
@@ -738,6 +741,9 @@ so the model can recognise when to ask rather than answer.
    after each remaining step).
 9. **Documentation reconciliation** — update `PROJECT_STATUS.md`; extend
    `decisions.md` only if a decision changes.
-10. **Persistent application database artifact** — pending.
+10. **Persistent application database artifact** — complete (`build_database`;
+    deterministic validation and publication; `open_readonly_database` for
+    runtime read-only opening). Later SQL policy, query execution, and product
+    integration remain separate.
 
 A seed producing different totals fails rather than silently redefining truth.

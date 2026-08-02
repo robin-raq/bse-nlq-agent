@@ -59,6 +59,26 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
   later byte-for-byte payload and `normalized_sql` remains evidence only.
   Casing or qualifier normalization must not replace `original_sql`.
 
+#### Locked U2 Slice 4B qualified-column rules
+
+- A qualified column resolves against the nearest lexical scope whose
+  `scope.sources` key matches the qualifier under the existing ASCII-only fold.
+  Finding the qualifier stops the search even when its requested column is
+  unknown or excluded; a more distant source is never a fallback.
+- A source alias replaces its physical table name as a qualifier. An unknown
+  qualifier is `unknown_column_qualifier`; a known source with no matching
+  output is `unknown_column`; a physical column outside the prompt-visible
+  inventory is `excluded_column`.
+- Qualified correlated lookup may cross subquery/Union parents. It does not
+  make CTE or derived-table bodies lateral. Physical bindings contribute
+  inventory-canonical `(table, column)` pairs to `referenced_columns`; internal
+  CTE/derived outputs validate by their output schema and add no synthetic pair.
+- Only `COUNT(*)` may contain a star. Authored bare or qualified projection
+  stars are `projection_star`; SQLGlot's pinned synthetic `VALUES` wrapper is
+  not treated as authored SQL.
+- Unqualified local/outer binding, projection aliases, and mixed closure remain
+  Slice 4C work.
+
 ### Schema and dataset
 
 Full contract in [`schema-design.md`](schema-design.md).

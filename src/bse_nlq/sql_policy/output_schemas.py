@@ -4,7 +4,8 @@ Builds bindable output-name schemas from SQLGlot scopes without mutating the
 AST, binding physical columns, expanding stars, or querying SQLite.
 
 Star-containing internal projections are Strategy A: ``is_complete=False`` with
-no invented expansion (full star policy remains Slice 4B).
+no invented expansion. Slice 4B separately rejects authored projection stars
+while preserving SQLGlot's synthetic VALUES wrapper.
 
 Unnamed expressions (empty bindable name) are omitted from the bindable lookup
 and mark the schema incomplete; expression text is never invented as a name.

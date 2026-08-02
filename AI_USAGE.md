@@ -27,6 +27,7 @@ AI assisted with:
 - test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution; and
 - test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution; and
 - test-first implementation of U2 Slice 4A canonical column inventories and internal CTE/derived/Union output-name schemas (single-writer lead plus read-only SQLGlot research, adversarial, and closure-audit agents), including SQLGlot/SQLite probes, red/green TDD, mutation checks, and installed-wheel validation without SQLite execution.
+- test-first implementation of U2 Slice 4B qualified physical/internal column binding, lexical qualified correlation, exclusions, canonical physical `referenced_columns`, and `COUNT(*)`-only star policy, including red/green boundary tests and preservation of the pinned SQLGlot `VALUES` rewrite.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -695,10 +696,24 @@ coverage of explicit CTE lists on Union CTE bodies; lead added four
 `cte_union_*` tests that kill the Union-scope ignore-explicit mutation in
 isolation. Agent 4 re-audit returned **APPROVE FOR EXTERNAL REVIEW**.
 
+### U2 Slice 4B — qualified columns and star policy
+
+Codex implemented the candidate-reviewed qualified binding contract on the
+post-Slice-4A checkpoint. Permanent tests cover local physical and internal
+sources, nearest-scope qualified correlation, alias shadowing, no outer fallback
+after a qualifier match, unknown qualifier versus unknown column diagnostics,
+prompt exclusions, canonical physical references, CTE/derived non-lateral
+boundaries, and expression contexts beyond projection. Authored bare and
+qualified stars are rejected while `COUNT(*)` and SQLGlot's pinned synthetic
+`VALUES` wrapper remain supported. Unqualified binding remains explicitly
+deferred to Slice 4C. No provider call, SQLite execution, or AST mutation was
+introduced. The focused suite is 26 tests; SQL-policy is 318 and the full
+offline suite is 867.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4A (parse foundation, structure policy, physical-table authorization, canonical column inventories, and internal output-name schemas) are implemented and test-verified (4A uncommitted in the working tree). Generated database files remain untracked local artifacts. Public column binding, star/function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4B are implemented and test-verified. Qualified physical/internal binding, qualified correlation, exclusions, canonical physical references, and star policy are present; unqualified binding, function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Generated database files remain untracked local artifacts. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

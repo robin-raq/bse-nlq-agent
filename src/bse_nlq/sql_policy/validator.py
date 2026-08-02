@@ -1,4 +1,4 @@
-"""Static SQL parsing, structure policy, and table/column inventory checks."""
+"""Static SQL parsing, structure, table, and qualified-column policy."""
 
 from __future__ import annotations
 
@@ -12,6 +12,10 @@ from sqlglot.expressions import Expr
 from bse_nlq.sql_policy.column_inventory import (
     CanonicalColumnInventory,
     canonicalize_column_inventories,
+)
+from bse_nlq.sql_policy.column_policy import (
+    authorize_qualified_columns,
+    enforce_star_policy,
 )
 from bse_nlq.sql_policy.errors import (
     InvalidSqlError,
@@ -33,8 +37,7 @@ class _PolicyInventories:
 
     ``physical_tables`` authorize physical sources (Slice 3).
     ``column_inventory`` holds canonical physical and prompt-visible column
-    inventories (Slice 4A). Column binding and ``referenced_columns`` remain
-    deferred.
+    inventories (Slice 4A) consumed by qualified binding (Slice 4B).
     """
 
     physical_tables: frozenset[str]
@@ -53,8 +56,11 @@ def validate_sql(
     Accepts immutable inventories. ``physical_tables`` is authoritative for
     Slice 3 physical-source allowlisting. Column inventories are validated and
     canonicalized (Slice 4A). Internal CTE/derived/Union output-name schemas
-    are constructed for duplicate and arity checks; column binding and
-    ``referenced_columns`` remain deferred. Does not open SQLite or execute SQL.
+    are constructed for duplicate and arity checks. Qualified columns and
+    lexical qualified correlation are bound against physical/internal sources,
+    exclusions are enforced, and physical identities populate
+    ``referenced_columns`` (Slice 4B). Unqualified binding remains deferred.
+    Does not open SQLite or execute SQL.
     """
     if not isinstance(sql, str):
         raise TypeError("sql must be str")
@@ -108,6 +114,11 @@ def validate_sql(
         expression, physical_tables=inventories.physical_tables
     )
     validate_internal_output_schemas(expression)
+    enforce_star_policy(expression)
+    referenced_columns = authorize_qualified_columns(
+        expression,
+        inventory=inventories.column_inventory,
+    )
     normalized_sql = _normalize(expression)
     fingerprint = hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
     return ValidatedSql(
@@ -115,7 +126,7 @@ def validate_sql(
         normalized_sql=normalized_sql,
         fingerprint=fingerprint,
         referenced_tables=referenced_tables,
-        referenced_columns=frozenset(),
+        referenced_columns=referenced_columns,
         referenced_functions=frozenset(),
     )
 

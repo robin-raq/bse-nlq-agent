@@ -14,8 +14,9 @@ class SqlRejectionReason(StrEnum):
     ``unknown_table``, ``qualified_table``, and ``unsupported_table_source``.
     Slice 4A adds ``ambiguous_column`` (duplicate internal outputs),
     ``invalid_cte_column_list`` (explicit CTE list arity mismatch), and
-    ``invalid_union_arity`` (Union branch arity mismatch). This is not a
-    terminal-state enum.
+    ``invalid_union_arity`` (Union branch arity mismatch). Slice 4B adds
+    qualified-column, exclusion, unsupported-column, and projection-star
+    reasons. This is not a terminal-state enum.
     """
 
     EMPTY_SQL = "empty_sql"
@@ -31,6 +32,11 @@ class SqlRejectionReason(StrEnum):
     AMBIGUOUS_COLUMN = "ambiguous_column"
     INVALID_CTE_COLUMN_LIST = "invalid_cte_column_list"
     INVALID_UNION_ARITY = "invalid_union_arity"
+    PROJECTION_STAR = "projection_star"
+    UNKNOWN_COLUMN_QUALIFIER = "unknown_column_qualifier"
+    UNKNOWN_COLUMN = "unknown_column"
+    EXCLUDED_COLUMN = "excluded_column"
+    UNSUPPORTED_COLUMN_REFERENCE = "unsupported_column_reference"
 
 
 class SqlPolicyError(Exception):

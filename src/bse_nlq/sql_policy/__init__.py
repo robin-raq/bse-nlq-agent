@@ -13,9 +13,12 @@ canonical ``referenced_tables`` output.
 
 Slice 4A: canonical ``physical_columns`` / ``prompt_visible_columns``
 inventories and internal CTE/derived/Union output-name schemas for duplicate
-and arity detection. Public column binding, ``referenced_columns``, global
-star policy, function, and date authorization remain later slices. This
-package does not open SQLite or execute SQL.
+and arity detection.
+
+Slice 4B: qualified physical/internal column binding, qualified lexical
+correlation, prompt-exclusion enforcement, canonical ``referenced_columns``,
+and ``COUNT(*)``-only star policy. Unqualified binding, functions, and dates
+remain later slices. This package does not open SQLite or execute SQL.
 """
 
 from __future__ import annotations

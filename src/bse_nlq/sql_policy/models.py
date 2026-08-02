@@ -13,8 +13,10 @@ class ValidatedSql:
     Later execution must run ``original_sql``, never ``normalized_sql``.
     ``normalized_sql`` is a deterministic SQLGlot SQLite rendering used only for
     fingerprinting and comparison. ``referenced_tables`` holds canonical
-    physical table names after Slice 3 authorization. Column and function
-    collections may remain empty until later slices.
+    physical table names after Slice 3 authorization. ``referenced_columns``
+    holds canonical physical pairs bound by the implemented column slices;
+    internal outputs are not reported as physical pairs. Function references
+    remain empty until a later slice.
     """
 
     original_sql: str

@@ -1,8 +1,8 @@
 """Canonical physical and prompt-visible column inventories for SQL policy.
 
 Slice 4A validates and canonicalizes caller-supplied column inventories against
-``physical_tables``. It does not bind SQL columns, authorize references, or
-populate ``referenced_columns``.
+``physical_tables``. Slice 4B consumes the immutable result for qualified
+physical-column binding; unqualified binding remains separate.
 """
 
 from __future__ import annotations

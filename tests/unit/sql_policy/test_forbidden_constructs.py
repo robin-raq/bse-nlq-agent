@@ -133,8 +133,8 @@ def test_valid_aliases_remain_accepted(sql: str) -> None:
     result = validate_sql(
         sql,
         physical_tables=frozenset({"events"}),
-        physical_columns=EMPTY_COLUMNS,
-        prompt_visible_columns=EMPTY_VISIBLE,
+        physical_columns=frozenset({("events", "event_id")}),
+        prompt_visible_columns=frozenset({("events", "event_id")}),
     )
     assert isinstance(result, ValidatedSql)
 

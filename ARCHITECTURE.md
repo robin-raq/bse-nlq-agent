@@ -57,10 +57,11 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
-- `bse_nlq.sql_policy` — Slices 1–4A: `validate_sql` / `ValidatedSql` with
-  structure policy, physical-table authorization, canonical column inventories,
-  and internal CTE/derived/Union output-name schemas (no public column
-  binding / `referenced_columns` yet)
+- `bse_nlq.sql_policy` — Slices 1–4B: `validate_sql` / `ValidatedSql` with
+  bounded parsing, structure policy, physical-table authorization, canonical
+  column inventories, internal CTE/derived/Union output-name schemas,
+  qualified-column binding/correlation, exclusions, canonical physical
+  `referenced_columns`, and `COUNT(*)`-only star policy
 
 ## Model contract
 
@@ -149,14 +150,14 @@ canonicalizes `physical_columns` / `prompt_visible_columns` against
 `physical_tables` (ASCII-only fold, inventory spelling, visible ⊆ physical)
 and builds internal CTE/derived/Union output-name schemas for duplicate and
 arity detection (`ambiguous_column`, `invalid_cte_column_list`,
-`invalid_union_arity`). Star-containing internal projections — including
-non-first Union branches and SQLGlot's `VALUES`→`SELECT *` rewrite — are
-marked incomplete without expansion (Strategy A); expression-count Union
-arity checks are skipped when any branch is incomplete so SQLite-valid
-VALUES unions are not false-rejected. It does **not** yet bind SQL
-columns, populate `referenced_columns`, authorize or reject excluded columns
-in SQL, implement correlation, ORDER BY aliases, global star policy,
-functions, or dates. Static policy uses the parsed
+`invalid_union_arity`). Slice 4B binds qualified physical/internal columns,
+resolves qualified correlation through the nearest permitted lexical scope,
+rejects unknown qualifiers/columns and excluded physical columns, populates
+canonical physical `referenced_columns`, and rejects authored stars except
+`COUNT(*)`. SQLGlot's synthetic `VALUES` star remains distinguishable from
+authored SQL. It does **not** yet bind unqualified columns, implement
+unqualified correlation or projection-alias contexts, authorize functions, or
+authorize dates. Static policy uses the parsed
 SQLite AST, never regex or semicolon heuristics as the primary authority.
 Rejected SQL will expose `generated_sql` but leave `executed_sql` null. The
 complete SQL-safety foundation is not yet implemented.
@@ -164,7 +165,7 @@ complete SQL-safety foundation is not yet implemented.
 Physical-source classification uses only `scope.sources`: `exp.Table` is a
 physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw
 `find_all(exp.Table)`, and `qualify()` are not authorization authorities.
-Later column slices remain locked to local-ambiguity-first resolution,
+Slice 4C remains locked to local-ambiguity-first unqualified resolution,
 `COUNT(*)`-only stars, SQLite-compatible ASCII case-insensitive matching
 (non-ASCII code points preserved; no Unicode casefold) with
 inventory-canonical names, no rewrite of `original_sql`, and no in-place

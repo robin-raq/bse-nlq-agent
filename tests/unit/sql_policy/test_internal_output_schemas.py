@@ -431,10 +431,10 @@ def test_count_star_alias_is_complete() -> None:
     assert schema.is_complete is True
 
 
-def test_star_containing_cte_accepted_without_column_binding() -> None:
-    result = _validate("WITH x AS (SELECT * FROM events) SELECT 1 FROM x")
-    assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+def test_star_containing_cte_rejected_by_slice_4b_policy() -> None:
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate("WITH x AS (SELECT * FROM events) SELECT 1 FROM x")
+    assert exc_info.value.reason is SqlRejectionReason.PROJECTION_STAR
 
 
 # --- Nested scopes ---

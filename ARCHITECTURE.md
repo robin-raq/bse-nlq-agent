@@ -52,7 +52,7 @@ All implementation lives in the single `src/bse_nlq/` package. Modules should be
 
 Implemented module paths for this phase:
 
-- `bse_nlq.db` — `apply_schema`, `load_seed_data`, `build_database`, `open_readonly_database` / `ReadOnlyDatabase`
+- `bse_nlq.db` — `apply_schema`, `load_seed_data`, `build_database`, `open_readonly_database` / `ReadOnlyDatabase`, `execute_validated_sql` / `RawQueryResult`
 - `bse_nlq.metadata` — `load_semantic_metadata`
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
@@ -126,12 +126,21 @@ failure remains available through standard exception context.
 connection-dependent property and the package-private `_connection` reject use
 after close.
 
-Remaining independent controls are still pending and must each be tested before
-model-generated SQL is executed:
-
-1. Default-deny SQLite authorizer.
-2. Progress-handler instruction budget.
-3. Result-row / column caps and controlled execution.
+U3 (`execute_validated_sql` / `RawQueryResult` in `bse_nlq.db.execution`)
+completes controlled execution on top of the U1 read-only runtime boundary:
+a `sqlite3.Connection` authorizer allows exactly `SQLITE_SELECT`
+unconditionally, `SQLITE_READ` only for the query's own
+`referenced_tables`/`referenced_columns`, and `SQLITE_FUNCTION` only for the
+same fixed allowlist the static policy enforces; every other action code —
+writes, schema changes, PRAGMA, ATTACH/DETACH, transactions, recursive CTEs,
+and unknown codes — is denied by one catch-all default-deny branch. A
+progress handler bounds total VDBE instructions (budget calibrated well
+above real anchor cost, ~1-2k opcodes, while still bounding runaway
+execution); row/column counts are hard-capped with overflow rejection rather
+than silent truncation. Both callbacks are installed immediately before
+execution and removed in `finally`, so a failure never leaves them attached
+for a later, unrelated query. Accepts only `ValidatedSql` and executes
+`original_sql`, never `normalized_sql`.
 
 (Schema-aware SQLGlot AST authorization — tables, columns, stars, functions,
 and machine-clock rejection — is complete as of Slice 4D.)
@@ -179,8 +188,9 @@ calls inside them are still checked independently. Allowed names populate
 `referenced_functions`. Static policy uses the parsed SQLite AST, never regex
 or semicolon heuristics as the primary authority. Rejected SQL will expose
 `generated_sql` but leave `executed_sql` null. **The static SQL-safety
-foundation (Slices 1–4D) is now complete**; the authorizer and controlled
-execution boundary remain.
+foundation (Slices 1–4D) and the U3 authorizer/execution boundary are both
+now complete**; `QueryService`, provider adapters, and the product CLI
+remain.
 
 Physical-source classification uses only `scope.sources`: `exp.Table` is a
 physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw

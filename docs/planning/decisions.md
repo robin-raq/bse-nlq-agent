@@ -122,6 +122,23 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
   are still checked independently — only the connective/predicate node itself
   is exempt.
 
+#### Locked U3 authorizer/execution rules
+
+- The SQLite authorizer allowlists exactly three action codes:
+  `SQLITE_SELECT` unconditionally, `SQLITE_READ` only for the executing
+  query's own `referenced_tables`/`referenced_columns`, and
+  `SQLITE_FUNCTION` only for the same fixed function allowlist the static
+  policy enforces. Every other action code — including ones not yet defined
+  by SQLite — is denied by one catch-all branch, not an enumerated deny list.
+- `sqlite3` gives no single reliable signal for "this failure was an
+  authorizer denial": statement-level and read denials raise with
+  `sqlite_errorcode == SQLITE_AUTH` but inconsistent message text; function
+  denial raises with the "not authorized" wording but `sqlite_errorcode ==
+  SQLITE_ERROR`. Classification checks both signals.
+- Row/column limits reject on overflow (the `(N+1)`th row) rather than
+  truncating; the opcode budget is calibrated well above real anchor cost
+  (~1-2k opcodes) while still bounding runaway execution.
+
 ### Schema and dataset
 
 Full contract in [`schema-design.md`](schema-design.md).

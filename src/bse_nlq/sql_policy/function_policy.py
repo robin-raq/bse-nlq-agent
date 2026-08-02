@@ -30,6 +30,10 @@ _ALLOWED_FUNCTIONS: dict[type[exp.Func], str] = {
     exp.Coalesce: "COALESCE",
 }
 
+#: Canonical allowed names, reused by the SQLite authorizer (U3) as the same
+#: single source of truth rather than a second hand-maintained allowlist.
+ALLOWED_FUNCTION_NAMES: frozenset[str] = frozenset(_ALLOWED_FUNCTIONS.values())
+
 
 def authorize_functions(expression: Expr) -> frozenset[str]:
     """Reject any function call outside the fixed allowlist.

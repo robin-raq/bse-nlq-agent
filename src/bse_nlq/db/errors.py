@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 
 class DatabaseBuildError(Exception):
     """Raised when persistent database construction cannot complete.
@@ -26,3 +28,32 @@ class DatabaseRuntimeError(Exception):
     ``KeyboardInterrupt`` / ``SystemExit`` are never converted to this type.
     This phase does not map the error onto application terminal states.
     """
+
+
+class ExecutionErrorReason(StrEnum):
+    """Closed reasons for controlled-execution failures.
+
+    Not a terminal-state enum; the query service maps these later.
+    """
+
+    ROW_LIMIT_EXCEEDED = "row_limit_exceeded"
+    COLUMN_LIMIT_EXCEEDED = "column_limit_exceeded"
+    EXECUTION_BUDGET_EXCEEDED = "execution_budget_exceeded"
+    AUTHORIZATION_DENIED = "authorization_denied"
+    EXECUTION_FAILED = "execution_failed"
+
+
+class SqlExecutionError(Exception):
+    """Raised when validated SQL cannot be executed under the safety controls.
+
+    Row/column overflow, opcode-budget exhaustion, authorizer denial, and
+    other SQLite execution failures surface as this type with ``reason`` set
+    and, for wrapped SQLite failures, the original exception preserved as
+    ``__cause__``. Programming defects and ``KeyboardInterrupt`` /
+    ``SystemExit`` are never converted to this type. This phase does not map
+    the error onto application terminal states.
+    """
+
+    def __init__(self, message: str, *, reason: ExecutionErrorReason) -> None:
+        super().__init__(message)
+        self.reason = reason

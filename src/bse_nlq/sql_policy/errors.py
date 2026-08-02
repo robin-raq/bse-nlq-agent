@@ -12,7 +12,10 @@ class SqlRejectionReason(StrEnum):
     Slice 2 adds ``unsupported_statement``, ``forbidden_construct``,
     ``recursive_cte``, and ``parameterized_sql``. Slice 3 adds
     ``unknown_table``, ``qualified_table``, and ``unsupported_table_source``.
-    This is not a terminal-state enum.
+    Slice 4A adds ``ambiguous_column`` (duplicate internal outputs),
+    ``invalid_cte_column_list`` (explicit CTE list arity mismatch), and
+    ``invalid_union_arity`` (Union branch arity mismatch). This is not a
+    terminal-state enum.
     """
 
     EMPTY_SQL = "empty_sql"
@@ -25,6 +28,9 @@ class SqlRejectionReason(StrEnum):
     UNKNOWN_TABLE = "unknown_table"
     QUALIFIED_TABLE = "qualified_table"
     UNSUPPORTED_TABLE_SOURCE = "unsupported_table_source"
+    AMBIGUOUS_COLUMN = "ambiguous_column"
+    INVALID_CTE_COLUMN_LIST = "invalid_cte_column_list"
+    INVALID_UNION_ARITY = "invalid_union_arity"
 
 
 class SqlPolicyError(Exception):

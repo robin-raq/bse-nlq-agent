@@ -25,7 +25,8 @@ AI assisted with:
 - test-first implementation of the deterministic persistent SQLite builder (`build_database`), including atomic publication, artifact validation, logical fingerprinting, failure cleanup, developer module entry point, and installed-wheel regression coverage; and
 - test-first implementation of U2 Slice 1 SQL-policy parsing (`bse_nlq.sql_policy.validate_sql` → immutable `ValidatedSql`), including SQLGlot probes, single-statement enforcement, fingerprinting, ten mutation checks, and installed-wheel import without SQLite execution; and
 - test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution; and
-- test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution.
+- test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution; and
+- test-first implementation of U2 Slice 4A canonical column inventories and internal CTE/derived/Union output-name schemas (single-writer lead plus read-only SQLGlot research, adversarial, and closure-audit agents), including SQLGlot/SQLite probes, red/green TDD, mutation checks, and installed-wheel validation without SQLite execution.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -587,10 +588,117 @@ CLI, rendering, or evaluation was added. Teaching dirs `docs/layers/` and
 re-review returned APPROVE; this material lands as
 `feat: authorize physical SQL table sources`.
 
+### U2 Slice 4A — column inventories and internal output schemas
+
+Multi-agent mode used under a strict single-writer model:
+
+| Agent | Role | Write access |
+|---|---|---|
+| Lead | production, tests, docs, validation, report | primary checkout only |
+| Agent 2 | SQLGlot 30.14.0 / SQLite probes | read-only (scripts under `/tmp`) |
+| Agent 3 | adversarial tests / mutations | read-only |
+| Agent 4 | independent closure audit | read-only (after lead complete) |
+
+Only the lead modified repository files. Specialists returned evidence; the lead
+reproduced SQLGlot/SQLite probes before implementing output schemas.
+
+Pinned: `sqlglot==30.14.0`. Probe SQLite: 3.53.1 (research) / runtime 3.53.1.
+
+Probe findings (temporary scripts under `/tmp/bse-nlq-4a-probes`, not in-repo):
+
+- CTE/derived `named_selects` / `alias_or_name` supply projection output names;
+  explicit CTE lists appear as `scope.outer_columns` and override projections.
+- Explicit CTE arity mismatch: SQLite `OperationalError`
+  (`table x has N values for M columns`); SQLGlot still parses — Slice 4A
+  rejects with `invalid_cte_column_list`.
+- Duplicate CTE/derived outputs: SQLite renames (`id:1`); policy fails closed
+  with `ambiguous_column` (never silently choose first).
+- Union output names come from the first Select branch (`named_selects` on the
+  parent Union); mismatched branch aliases do not rename; branch arity mismatch
+  → SQLite error → Slice 4A `invalid_union_arity`.
+- Unnamed expressions (`SELECT id + 1`): SQLGlot `named_selects=[]` /
+  empty `alias_or_name`; SQLite exposes expression text — policy omits from
+  bindable lookup and marks schema incomplete (does not invent `"id + 1"`).
+- Stars inside CTE/derived: `named_selects=['*']`; Strategy A — `is_complete=False`,
+  no inventory expansion, no SQLite expansion, no top-level star policy.
+- `COUNT(*) AS total` is a named complete output (not projection-star deferral).
+- AST render before/after schema extraction is unchanged; no `qualify()` authority.
+
+Genuine red evidence: inventory suite initially failed collection with
+`ModuleNotFoundError: column_inventory` before production module existed;
+behavior assertions then drove canonicalization/subset/collision contracts.
+Output-schema tests were written against probe-backed contracts and integrated
+through `validate_sql`.
+
+Implementation:
+
+- `column_inventory.canonicalize_column_inventories` → immutable
+  `CanonicalColumnInventory` (`MappingProxyType` / frozensets); TypeError for
+  inventory-contract failures (never `SqlRejectedError`).
+- `output_schemas.validate_internal_output_schemas` after table auth; reasons
+  `ambiguous_column`, `invalid_cte_column_list`, `invalid_union_arity`.
+- Public `__all__` unchanged; `referenced_columns` / `referenced_functions`
+  remain empty; `orders.order_ref` SQL is not rejected for exclusion yet.
+
+Rejection precedence after Slice 3 table checks:
+
+9. internal output-schema construction (CTE list / Union arity)
+10. duplicate internal output → `ambiguous_column`
+
+Mutations (disposable copy `/tmp/bse-nlq-4a-mut`, `PYTHONPATH` isolation):
+frozenset/set, whitespace, unknown table, case-sensitive tables, casefold/lower,
+collision disable, visible-subset disable, SQL spelling, empty reject,
+`find_all` outputs, ignore/truncate explicit CTE lists, keep-first duplicate,
+case-sensitive dups, casefold aliases, wrong Union branch, invent unnamed names,
+fake star expansion, populate referenced_columns/functions, broad except,
+qualify import/call, in-place alias `.set`, original_sql replacement — all
+killed by focused tests after isolation fix; no meaningful survivors.
+
+Hardening continuation (same single-writer Cursor lead + fresh Agents 2–4):
+
+- Agent 2 re-probed SQLGlot 30.14.0 / SQLite 3.53.1 and confirmed existing
+  contracts; flagged that SQLite silently picks the first duplicate name and
+  that `qualify()` mis-assigns names on CTE arity mismatch.
+- Agent 3 adversarial review found a real Union false-accept/false-reject:
+  `has_star` was computed only from the first branch, and SQLGlot's
+  `VALUES → SELECT * FROM (VALUES …)` rewrite made expression-count arity
+  unreliable. Lead fixed `_schema_for_union_scope` to scan all branches for
+  stars/Values, skip false `invalid_union_arity` when incomplete, and keep
+  Strategy A incompleteness. Added permanent tests for non-first-branch
+  stars, VALUES unions, explicit CTE list over qualified star, visible
+  ASCII collision, inventory-TypeError-before-empty-SQL precedence, and
+  `column_inventory` source-scan guards.
+- Disposable-copy mutations must use `uv run python3 -m pytest` (not
+  `uv run pytest` after `cp -r`, which can re-test the primary checkout via
+  shebang).
+
+Validation counts are refreshed in PROJECT_STATUS after the full suite:
+column-inventory 44, internal-output 49, physical-table 51, parsing 25,
+SQL-policy 288, runtime 92, database 381, metadata 69, decision 92, full 833;
+Ruff, format, mypy, lock, diff-check, credential scan, wheel
+(`sqlglot==30.14.0`, SHA-256 `387212b1…`), installed-wheel probe outside
+checkout (`uv run --python 3.13 --with wheel`), offline `--no-build-isolation`
+and cached isolated offline builds. Required Agent-4 mutation set (casefold,
+visible-subset remove, unknown table accept, keep-first duplicate, ignore
+explicit CTE list including Union-CTE bodies, wrong Union branch, AST alias
+`.set`, populate `referenced_columns`, qualify import, broad except) all
+killed under `PYTHONPATH` isolation after adding permanent Union+explicit-CTE
+tests that closed an Agent-4 coverage gap.
+No provider calls and no application SQLite execution in sql_policy.
+Nothing staged or committed. Deferred: Slice 4B/4C column binding, exclusions
+in SQL, global stars, functions/dates, authorizer, execution, QueryService,
+CLI, evaluation. `docs/layers/` and `docs/learn-site/` remain untracked and
+untouched.
+
+Independent closure: Agent 4 initially **BLOCK**ed for missing permanent
+coverage of explicit CTE lists on Union CTE bodies; lead added four
+`cte_union_*` tests that kill the Union-scope ignore-explicit mutation in
+isolation. Agent 4 re-audit returned **APPROVE FOR EXTERNAL REVIEW**.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–3 (parse foundation, structure policy, and physical-table authorization) are implemented and test-verified. Generated database files remain untracked local artifacts. Column/star/function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4A (parse foundation, structure policy, physical-table authorization, canonical column inventories, and internal output-name schemas) are implemented and test-verified (4A uncommitted in the working tree). Generated database files remain untracked local artifacts. Public column binding, star/function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

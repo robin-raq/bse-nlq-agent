@@ -57,7 +57,10 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
-- `bse_nlq.sql_policy` — Slices 1–3: `validate_sql` / `ValidatedSql` with structure policy and physical-table authorization (no column authorization yet)
+- `bse_nlq.sql_policy` — Slices 1–4A: `validate_sql` / `ValidatedSql` with
+  structure policy, physical-table authorization, canonical column inventories,
+  and internal CTE/derived/Union output-name schemas (no public column
+  binding / `referenced_columns` yet)
 
 ## Model contract
 
@@ -141,8 +144,19 @@ physical tables from SQLGlot `scope.sources` against the caller-supplied
 `physical_tables` inventory. Canonical names are returned in
 `referenced_tables`. Nested `Scope` sources (CTEs/derived tables) are not
 physical tables; database/catalog qualifiers and non-identifier table sources
-(for example table-valued functions) are rejected. It does **not** yet
-authorize columns, stars, functions, or dates. Static policy uses the parsed
+(for example table-valued functions) are rejected. Slice 4A validates and
+canonicalizes `physical_columns` / `prompt_visible_columns` against
+`physical_tables` (ASCII-only fold, inventory spelling, visible ⊆ physical)
+and builds internal CTE/derived/Union output-name schemas for duplicate and
+arity detection (`ambiguous_column`, `invalid_cte_column_list`,
+`invalid_union_arity`). Star-containing internal projections — including
+non-first Union branches and SQLGlot's `VALUES`→`SELECT *` rewrite — are
+marked incomplete without expansion (Strategy A); expression-count Union
+arity checks are skipped when any branch is incomplete so SQLite-valid
+VALUES unions are not false-rejected. It does **not** yet bind SQL
+columns, populate `referenced_columns`, authorize or reject excluded columns
+in SQL, implement correlation, ORDER BY aliases, global star policy,
+functions, or dates. Static policy uses the parsed
 SQLite AST, never regex or semicolon heuristics as the primary authority.
 Rejected SQL will expose `generated_sql` but leave `executed_sql` null. The
 complete SQL-safety foundation is not yet implemented.

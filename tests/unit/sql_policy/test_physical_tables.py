@@ -400,20 +400,23 @@ def test_empty_physical_inventory_rejects_known_looking_table() -> None:
     assert exc_info.value.reason is SqlRejectionReason.UNKNOWN_TABLE
 
 
-def test_unused_column_inventories_remain_type_validated_only() -> None:
-    result = _validate(
-        "SELECT 1 FROM events",
-    )
-    # Passing mismatched column inventories must not affect table auth yet.
-    result2 = validate_sql(
+def test_column_inventories_are_canonicalized_without_binding() -> None:
+    result = validate_sql(
         "SELECT 1 FROM events",
         physical_tables=INVENTORY,
-        physical_columns=frozenset({("nope", "col")}),
-        prompt_visible_columns=frozenset({("nope", "col")}),
+        physical_columns=frozenset({("EVENTS", "id")}),
+        prompt_visible_columns=frozenset({("events", "ID")}),
     )
-    assert result.referenced_tables == result2.referenced_tables
     assert result.referenced_tables == frozenset({"events"})
-    assert result2.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset()
+    assert result.referenced_functions == frozenset()
+    with pytest.raises(TypeError, match="physical_columns"):
+        validate_sql(
+            "SELECT 1 FROM events",
+            physical_tables=INVENTORY,
+            physical_columns=frozenset({("nope", "col")}),
+            prompt_visible_columns=frozenset({("nope", "col")}),
+        )
 
 
 def test_structure_precedence_beats_unknown_table() -> None:

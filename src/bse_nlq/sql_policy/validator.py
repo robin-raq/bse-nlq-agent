@@ -1,4 +1,4 @@
-"""Static SQL parsing, structure policy, and Slice 3 table authorization."""
+"""Static SQL parsing, structure policy, and table/column inventory checks."""
 
 from __future__ import annotations
 
@@ -9,12 +9,17 @@ import sqlglot
 from sqlglot.errors import ParseError
 from sqlglot.expressions import Expr
 
+from bse_nlq.sql_policy.column_inventory import (
+    CanonicalColumnInventory,
+    canonicalize_column_inventories,
+)
 from bse_nlq.sql_policy.errors import (
     InvalidSqlError,
     SqlRejectedError,
     SqlRejectionReason,
 )
 from bse_nlq.sql_policy.models import ValidatedSql
+from bse_nlq.sql_policy.output_schemas import validate_internal_output_schemas
 from bse_nlq.sql_policy.scope_policy import authorize_physical_tables
 from bse_nlq.sql_policy.structure import apply_structure_policy
 
@@ -23,14 +28,14 @@ from bse_nlq.sql_policy.structure import apply_structure_policy
 class _PolicyInventories:
     """Immutable inventory bag for ``validate_sql``.
 
-    Slice 3 uses ``physical_tables`` for physical-source authorization.
-    ``physical_columns`` and ``prompt_visible_columns`` remain type-validated
-    for later slices.
+    ``physical_tables`` authorize physical sources (Slice 3).
+    ``column_inventory`` holds canonical physical and prompt-visible column
+    inventories (Slice 4A). Column binding and ``referenced_columns`` remain
+    deferred.
     """
 
     physical_tables: frozenset[str]
-    physical_columns: frozenset[tuple[str, str]]
-    prompt_visible_columns: frozenset[tuple[str, str]]
+    column_inventory: CanonicalColumnInventory
 
 
 def validate_sql(
@@ -40,11 +45,13 @@ def validate_sql(
     physical_columns: frozenset[tuple[str, str]],
     prompt_visible_columns: frozenset[tuple[str, str]],
 ) -> ValidatedSql:
-    """Parse, apply structure policy, and authorize physical table sources.
+    """Parse, apply structure policy, authorize tables, and check output schemas.
 
     Accepts immutable inventories. ``physical_tables`` is authoritative for
-    Slice 3 physical-source allowlisting. Column inventories are type-checked
-    only. Does not open SQLite or execute SQL.
+    Slice 3 physical-source allowlisting. Column inventories are validated and
+    canonicalized (Slice 4A). Internal CTE/derived/Union output-name schemas
+    are constructed for duplicate and arity checks; column binding and
+    ``referenced_columns`` remain deferred. Does not open SQLite or execute SQL.
     """
     if not isinstance(sql, str):
         raise TypeError("sql must be str")
@@ -86,6 +93,7 @@ def validate_sql(
     referenced_tables = authorize_physical_tables(
         expression, physical_tables=inventories.physical_tables
     )
+    validate_internal_output_schemas(expression)
     normalized_sql = _normalize(expression)
     fingerprint = hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
     return ValidatedSql(
@@ -108,14 +116,15 @@ def _coerce_inventories(
     physical_columns: frozenset[tuple[str, str]],
     prompt_visible_columns: frozenset[tuple[str, str]],
 ) -> _PolicyInventories:
+    tables = _require_str_frozenset("physical_tables", physical_tables)
+    column_inventory = canonicalize_column_inventories(
+        physical_tables=tables,
+        physical_columns=physical_columns,
+        prompt_visible_columns=prompt_visible_columns,
+    )
     return _PolicyInventories(
-        physical_tables=_require_str_frozenset("physical_tables", physical_tables),
-        physical_columns=_require_column_frozenset(
-            "physical_columns", physical_columns
-        ),
-        prompt_visible_columns=_require_column_frozenset(
-            "prompt_visible_columns", prompt_visible_columns
-        ),
+        physical_tables=tables,
+        column_inventory=column_inventory,
     )
 
 
@@ -125,16 +134,4 @@ def _require_str_frozenset(name: str, value: object) -> frozenset[str]:
     for item in value:
         if not isinstance(item, str):
             raise TypeError(f"{name} must contain only str values")
-    return value
-
-
-def _require_column_frozenset(name: str, value: object) -> frozenset[tuple[str, str]]:
-    if not isinstance(value, frozenset):
-        raise TypeError(f"{name} must be frozenset[tuple[str, str]]")
-    for item in value:
-        if not isinstance(item, tuple) or len(item) != 2:
-            raise TypeError(f"{name} must contain (table, column) str pairs")
-        table, column = item
-        if not isinstance(table, str) or not isinstance(column, str):
-            raise TypeError(f"{name} must contain (table, column) str pairs")
     return value

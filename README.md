@@ -45,9 +45,10 @@ Model output is treated as untrusted input. The planned execution boundary combi
 
 - a read-only database connection (**implemented** as `open_readonly_database`);
 - SQLite `query_only` (**implemented** and verified on that connection);
-- parsed-AST policy checks (**Slices 1–3 structure + physical-table
-  authorization implemented**; column/star/function/date authorization
-  pending);
+- parsed-AST policy checks (**Slices 1–4A structure, physical-table
+  authorization, canonical column inventories, and internal output-name
+  schemas implemented**; public column binding / global star / function / date
+  authorization pending);
 - a default-deny SQLite authorizer (pending);
 - an execution instruction budget (pending); and
 - a result-row cap (pending).

@@ -6,18 +6,18 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-U2 Slice 3 (physical-table authorization) is implemented and test-first
-verified offline on top of Slices 1–2. `validate_sql` authorizes physical
-`exp.Table` sources from SQLGlot `scope.sources` against the caller-supplied
-`physical_tables` inventory, returns canonical `referenced_tables`, treats
-nested `Scope` CTE/derived sources as non-physical, rejects
-database/catalog-qualified tables and unsupported table-source kinds, and
-keeps `referenced_columns` / `referenced_functions` empty. It does **not**
-authorize columns, stars, functions, or dates; does not open SQLite or execute
-SQL. U1 read-only runtime, schema/seed/metadata/decision/prompt/builder, and
-Slice 1–2 structure policy remain in place. No authorizer, progress/result
-limits, controlled executor, QueryService, provider adapter, live model
-request for SQL quality, or product CLI is implemented.
+U2 Slice 4A (canonical column inventories + internal output-name schemas) is
+implemented in the working tree and test-first verified offline on top of
+Slices 1–3. It is **not committed**. `validate_sql` validates/canonicalizes
+`physical_columns` and `prompt_visible_columns`, constructs internal
+CTE/derived/Union output-name schemas for duplicate/arity checks, and keeps
+`referenced_columns` / `referenced_functions` empty. It does **not** bind SQL
+columns, reject excluded columns from SQL, implement correlation, ORDER BY
+aliases, global star policy, functions, or dates; does not open SQLite or
+execute SQL. U1 read-only runtime, schema/seed/metadata/decision/prompt/builder,
+and Slice 1–3 table/structure policy remain in place. No authorizer,
+progress/result limits, controlled executor, QueryService, provider adapter,
+live model request for SQL quality, or product CLI is implemented.
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
 
@@ -50,6 +50,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 - U2 Slice 2 structure policy was implemented test-first in `src/bse_nlq/sql_policy/structure.py` and wired through `validate_sql`. Allowed roots: `Select` and `Union` (after unwrapping parenthesized `Subquery`). Every CTE body must unwrap to the same query roots; SQLGlot's rewritten `Values` shape is rejected explicitly. Whole-tree forbidden nodes include Insert/Update/Delete/Merge/Create/Drop/Alter/TruncateTable/Pragma/Attach/Detach/Command/Analyze/Transaction/Commit/Rollback/Grant/Revoke. Recursive `With(recursive=True)` is rejected. Parameters via `Placeholder`, `Parameter`, and unquoted `$…` columns are rejected; string literals and quoted `"$1"` identifiers are not. Precedence: unsupported root → forbidden construct (whole-tree nodes, then invalid CTE body) → recursive CTE → parameterized SQL. No table/column authorization, no SQLite open/execute.
 - A focused post-Slice-2 audit correction narrowed explicit runtime `close()` normalization to `sqlite3.Error`; programming/resource/control-flow failures propagate unchanged and all failed closes remain open and retryable. The same pass added parser-reachability-driven CTE tests, exact SQL-policy `__all__` coverage, pinned SQLGlot/Hatchling, and locked the Slice 3 design in authoritative documentation.
 - U2 Slice 3 physical-table authorization was implemented test-first in `src/bse_nlq/sql_policy/scope_policy.py` and wired through `validate_sql`. Authority is only `scope.sources` via `traverse_scope`: `exp.Table` with an identifier name is authorized against the ASCII-folded inventory (`A`–`Z` only; empty inventory sets allowed); nested `Scope` is skipped as CTE/derived; qualifiers and non-identifier table forms fail closed. Canonical inventory spellings populate `referenced_tables` without mutating the parsed AST or rewriting `normalized_sql`. Closure-review corrections (ASCII fold, AST non-mutation tests, empty-inventory coverage) passed an independent APPROVE re-review; offline suite 740.
+- U2 Slice 4A canonical column inventories and internal output-name schemas were implemented test-first in `src/bse_nlq/sql_policy/column_inventory.py` and `output_schemas.py` (working tree, not committed). Inventories canonicalize through ASCII-only fold against `physical_tables`; visible ⊆ physical; internal CTE/derived/Union schemas detect duplicate folded outputs (`ambiguous_column`) and CTE/Union arity mismatches; star internals are Strategy A incomplete (including non-first Union branches and SQLGlot `VALUES`→`SELECT *` rewrites); explicit CTE lists over Union bodies are covered; `referenced_columns`/`referenced_functions` stay empty. Offline suite 833.
 - A follow-up hardening pass closed an independent audit of the runtime factory. All path preconditions (including `~` expansion and filesystem inspection) now evaluate inside the factory's exception boundary, so `RuntimeError` from unresolvable `~user` and `ValueError` from embedded NUL surface as `DatabaseRuntimeError` with `__cause__` preserved; `KeyboardInterrupt` / `SystemExit` still propagate unwrapped after cleanup. `close()` no longer swallows an underlying close failure — it raises `DatabaseRuntimeError` and leaves the wrapper open so a failed close is never reported as success. Three unreachable post-reconciliation checks (already guaranteed by `reconcile_metadata` and by constructing the visible/excluded inventories from the same metadata columns) were removed. `database_path` is documented and tested as immutable identity that remains readable after close.
 - A focused exception-boundary review follow-up narrowed ordinary open normalization from bare `except Exception` to `OSError | RuntimeError | ValueError | TypeError | sqlite3.Error` (with `MetadataError` still dedicated), so programming defects propagate after cleanup; removed the unreachable `os.fspath` guard; documented context-manager double-failure chaining and failed-open cleanup asymmetry.
 - An independent post-baseline audit found that the narrowed tuple above was still scoped by exception *type* across the whole open sequence rather than by the specific *operation* that can legitimately raise it, so a `RuntimeError`/`TypeError`/`ValueError` from a bug inside a metadata/inventory helper or the PRAGMA setup helper was silently normalized as an ordinary `DatabaseRuntimeError`, contradicting the documented contract. Normalization is now localized: `sqlite3.connect` and post-connect SQLite setup (`_disable_load_extension`, `_enable_and_verify_pragma`) each normalize only `sqlite3.Error` at their own call sites; the metadata step normalizes only `MetadataError` and `sqlite3.Error`; path preconditions remain self-contained inside `_validate_database_path` as before. Programming defects from those same helpers now propagate unwrapped after cleanup. Three pre-existing tests that had injected a bare `RuntimeError` as a stand-in "primary failure" through `_enable_and_verify_pragma`/`_disable_load_extension`/`load_semantic_metadata` and asserted it should normalize were corrected to inject a genuine `sqlite3.Error` instead, since a bare `RuntimeError` from those call sites is a programming defect under the corrected contract, not an expected failure mode.
@@ -68,7 +69,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata under `tests/unit/metadata/`; 195 SQL-policy under `tests/unit/sql_policy/` (Slices 1–3); 381 under `tests/unit/db` (includes persistent-build and runtime coverage; 92 runtime); 740 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; secret-pattern scan clean on tracked and new paths |
+| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata under `tests/unit/metadata/`; 288 SQL-policy under `tests/unit/sql_policy/` (Slices 1–4A; 44 inventory + 49 internal-schema); 381 under `tests/unit/db` (includes persistent-build and runtime coverage; 92 runtime); 833 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on tracked and new paths (`.env.example` empty placeholders only). Slice 4A changes remain unstaged/uncommitted. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -78,8 +79,8 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-U2 Slice 4: scope-aware column resolution and star policy on top of the
-Slice 1–3 parsing, structure, and physical-table foundation.
+U2 Slice 4B: qualified columns, exclusions, and star policy on top of the
+Slice 4A inventory and internal output-schema groundwork.
 
 ## Subsequent sequence
 
@@ -113,11 +114,11 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Full SQLGlot static authorization beyond Slice 3 (columns, stars, functions,
-dates), SQLite authorizer, progress and result limits, controlled query
-execution, provider adapters, QueryService, result formatting, product CLI,
-integration and safety suites beyond the runtime open boundary and
-Slice 1–3 SQL-policy foundation, evaluation cases, evaluation results, and
+Public column binding / `referenced_columns`, global star policy, function and
+date authorization (Slice 4B+), SQLite authorizer, progress and result limits,
+controlled query execution, provider adapters, QueryService, result formatting,
+product CLI, integration and safety suites beyond the runtime open boundary and
+Slice 1–4A SQL-policy foundation, evaluation cases, evaluation results, and
 final model selection.
 
 The physical schema DDL (`apply_schema`), deterministic seed loader
@@ -125,7 +126,8 @@ The physical schema DDL (`apply_schema`), deterministic seed loader
 factory (`open_readonly_database`), semantic metadata sidecar
 (`load_semantic_metadata`), ModelDecision validation
 (`parse_model_decision_json`), deterministic prompt builder
-(`build_prompt`), and SQL-policy Slices 1–3 (`validate_sql` / `ValidatedSql`
-with structure policy and physical-table authorization) are implemented and
-test-verified. Generated database files remain local and untracked. No
-provider adapter or model-SQL execution path exists.
+(`build_prompt`), and SQL-policy Slices 1–4A (`validate_sql` / `ValidatedSql`
+with structure policy, physical-table authorization, canonical column
+inventories, and internal output-name schemas) are implemented and
+test-verified (4A uncommitted). Generated database files remain local and
+untracked. No provider adapter or model-SQL execution path exists.

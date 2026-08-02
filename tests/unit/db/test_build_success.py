@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections import UserDict
+from collections.abc import Mapping
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import patch
@@ -13,6 +16,16 @@ import pytest
 from bse_nlq.db.artifact import APPLICATION_TABLES, compute_logical_content_fingerprint
 from bse_nlq.db.build import DatabaseBuildResult, build_database
 from bse_nlq.db.seed_data import EXPECTED_ROW_COUNTS, TOTAL_SEED_ROWS
+
+
+def _direct_result(row_counts: Mapping[str, int]) -> DatabaseBuildResult:
+    return DatabaseBuildResult(
+        destination=Path("direct.db"),
+        file_size_bytes=1024,
+        file_sha256="a" * 64,
+        logical_content_fingerprint="b" * 64,
+        row_counts=row_counts,
+    )
 
 
 def test_build_database_is_importable() -> None:
@@ -39,6 +52,37 @@ def test_successful_persistent_build(tmp_path: Path) -> None:
 
     with pytest.raises(TypeError):
         result.row_counts["venues"] = 0  # type: ignore[index]
+
+    with pytest.raises(FrozenInstanceError):
+        result.file_size_bytes = 0  # type: ignore[misc]
+    assert not hasattr(result, "__dict__")
+
+
+def test_direct_result_snapshots_and_freezes_source_dict() -> None:
+    source = {"venues": 4, "orders": 25}
+    original = source.copy()
+
+    result = _direct_result(source)
+
+    assert source == original
+    source["venues"] = 999
+    assert dict(result.row_counts) == original
+    with pytest.raises(TypeError):
+        result.row_counts["orders"] = 0  # type: ignore[index]
+
+    equal_result = _direct_result(original)
+    assert result == equal_result
+    assert "row_counts=mappingproxy" in repr(result)
+
+
+def test_direct_result_snapshots_caller_mapping_implementation() -> None:
+    source = UserDict({"venues": 4})
+
+    result = _direct_result(source)
+    source["venues"] = 999
+
+    assert result.row_counts == {"venues": 4}
+    assert isinstance(result.row_counts, MappingProxyType)
 
 
 def test_built_database_has_six_tables_and_109_rows(tmp_path: Path) -> None:

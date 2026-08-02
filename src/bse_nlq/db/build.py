@@ -60,6 +60,14 @@ class DatabaseBuildResult:
     logical_content_fingerprint: str
     row_counts: Mapping[str, int]
 
+    def __post_init__(self) -> None:
+        """Snapshot row-count evidence so callers cannot mutate the result."""
+        object.__setattr__(
+            self,
+            "row_counts",
+            MappingProxyType(dict(self.row_counts)),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class _PrecomputedEvidence:

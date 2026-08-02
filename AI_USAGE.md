@@ -2,6 +2,33 @@
 
 AI tools were used as design and implementation assistants for this take-home project.
 
+## Model comparison phase
+
+Codex coordinated three read-only reconnaissance reviews, one implementation
+writer, and three read-only closure reviews for the GPT-5 mini versus
+Groq-hosted GPT-OSS 120B comparison. AI helped build the comparison-only
+adapters, frozen manifest, execution-result invariants, repeated-call schedule,
+sanitized attempt records, and aggregate report. The key experiment prompt was
+the unchanged application prompt and strict `ModelDecision` schema; no
+provider-specific prompt, retry, SQL repair, or policy relaxation was used.
+
+Credentials were checked only for presence, sourced from the primary checkout
+inside command subshells, and never copied or printed. The artifacts exclude
+raw provider responses, headers, request identifiers, reasoning text, and
+exception messages. Independent review found and corrected three experiment
+defects before the reported rerun: failed requests entering latency statistics,
+transport failures polluting structured-output and policy denominators, and an
+overbroad `invalid_sql` safety outcome. It also added an explicit repeated-call
+correctness gate and sanitized HTTP failure categories.
+
+Validation used the offline reference evaluator, focused mocked provider and
+scoring tests, the full pytest suite, Ruff lint and format checks, mypy, `uv
+lock --check`, `git diff --check`, staged secret scans, and isolated wheel
+installation. The controlled rerun supported `keep_openai`: Groq was much
+faster on paired successful calls, but its HTTP 429 failures and one
+policy-rejected SQL attempt failed the correctness and reliability gates. The
+default provider was not changed.
+
 ## Tools
 
 - Claude Code (Claude Opus), including the Compound Engineering plugin
@@ -758,6 +785,6 @@ controlled execution boundary are next.
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, the complete SQL-policy Slices 1–4D, the default-deny SQLite authorizer plus controlled execution boundary (U3), the end-to-end `QueryService`, the `bse-nlq ask` CLI, and the OpenAI adapter are implemented and test-verified — **the full product vertical flow works, verified against both a mocked provider and the real GPT-5 mini model.** A full-scale statistical model-quality evaluation (beyond the 13-question set) and a Groq comparison remain out of scope for this pass. Generated database files remain untracked local artifacts.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, the complete SQL-policy Slices 1–4D, the default-deny SQLite authorizer plus controlled execution boundary (U3), the end-to-end `QueryService`, the `bse-nlq ask` CLI, and the OpenAI adapter are implemented and test-verified — **the full product vertical flow works, verified against both a mocked provider and the real GPT-5 mini model.** The bounded Groq comparison is also complete and supports retaining GPT-5 mini; only a larger holdout evaluation remains out of scope. Generated database files remain untracked local artifacts.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

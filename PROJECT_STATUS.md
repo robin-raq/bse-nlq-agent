@@ -124,27 +124,30 @@ Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/pl
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 100 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy regression suite); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 971 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 100 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy regression suite); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 11 comparison tests under `tests/unit/evaluation`; 982 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
+| Model comparison | Controlled repeated live run: OpenAI 24/24 answerable attempts and 4/4 behavioral cases; Groq 7/24 and 1/4, with 22 HTTP 429 failures across all attempts and one policy-rejected query. Groq reduced median latency by 81.7% on eight paired successful responses, but failed the correctness and reliability gates. Recommendation: keep OpenAI; default unchanged. |
 | Secrets | Credentials and the private exercise document remain untracked |
 
 Provider checks establish endpoint eligibility only. They do not establish SQL quality, comparative performance, or final model selection. Seed and anchor verification establish dataset correctness only; they do not establish model-generated SQL quality or an application query service. Metadata verification establishes business-meaning contracts only. Decision/prompt verification establishes envelope validation and deterministic prompt assembly only; they do not call a model or execute SQL. Persistent-build verification establishes artifact construction only. Read-only runtime verification establishes safe open/reconcile/close only; it does not validate, authorize, or execute model-generated SQL.
 
 ## Immediate next objective
 
-None outstanding for this take-home. The live smoke test and live
-evaluation are both complete (`evaluation/results_live.md`); remaining
-possible future work is a Groq comparison and a larger/holdout evaluation
-set, both explicitly out of scope for this pass.
+None outstanding for this take-home. The live smoke test, OpenAI evaluation,
+and Groq comparison are complete. A larger holdout evaluation remains possible
+future work and is explicitly out of scope for this pass.
 
 ## Active blockers
 
 None. The live OpenAI smoke test and the full live evaluation run both
 completed successfully against the real API.
 
-Model quality and final selection are intentionally blocked on the frozen evaluation, not on missing access or endpoint compatibility.
+The controlled comparison supports keeping GPT-5 mini as the default. Groq's
+latency was materially lower on paired successful calls, but its rate-limit
+availability, repeated correctness, behavioral reliability, and one
+policy-rejected query failed the conservative selection rule.
 
 ## Non-negotiable constraints
 
@@ -163,9 +166,9 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-A Groq comparison adapter and a larger/holdout evaluation set, both
-explicitly out of scope for this pass. The live OpenAI smoke test and live
-evaluation are complete, not pending.
+A larger/holdout evaluation set remains out of scope. The comparison-only Groq
+adapter and controlled live comparison are complete; they did not add runtime
+provider selection or change the product default.
 
 Implemented and test-verified: the physical schema DDL, deterministic seed
 loader, persistent builder, read-only runtime factory, semantic metadata

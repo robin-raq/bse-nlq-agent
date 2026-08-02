@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import shutil
@@ -25,6 +26,25 @@ def published_db(tmp_path: Path) -> Path:
 def _copy_published(published_db: Path, destination: Path) -> Path:
     shutil.copy2(published_db, destination)
     return destination
+
+
+_UNSUPPORTED_SPECIAL_FILE_ERRNOS = frozenset(
+    getattr(errno, name)
+    for name in (
+        "EAFNOSUPPORT",
+        "ENOSYS",
+        "ENOTSUP",
+        "EOPNOTSUPP",
+        "EPROTONOSUPPORT",
+    )
+    if hasattr(errno, name)
+)
+
+
+def _skip_if_special_file_unsupported(kind: str, exc: OSError) -> None:
+    if exc.errno not in _UNSUPPORTED_SPECIAL_FILE_ERRNOS:
+        raise exc
+    pytest.skip(f"{kind} creation is unsupported by the temporary filesystem: {exc}")
 
 
 def test_rejects_missing_path(tmp_path: Path) -> None:
@@ -227,16 +247,29 @@ def test_rejects_broken_symlink(tmp_path: Path) -> None:
 
 def test_rejects_nonregular_fifo(tmp_path: Path) -> None:
     fifo = tmp_path / "pipe.db"
-    os.mkfifo(fifo)
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("FIFO creation is unavailable on this platform")
+    try:
+        os.mkfifo(fifo)
+    except OSError as exc:
+        _skip_if_special_file_unsupported("FIFO", exc)
     with pytest.raises(DatabaseRuntimeError, match="regular file"):
         open_readonly_database(fifo)
 
 
 def test_rejects_unix_socket(tmp_path: Path) -> None:
     sock_path = tmp_path / "sock.db"
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    if not hasattr(socket, "AF_UNIX"):
+        pytest.skip("Unix-domain socket creation is unavailable on this platform")
     try:
-        server.bind(str(sock_path))
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    except OSError as exc:
+        _skip_if_special_file_unsupported("Unix-domain socket", exc)
+    try:
+        try:
+            server.bind(str(sock_path))
+        except OSError as exc:
+            _skip_if_special_file_unsupported("Unix-domain socket", exc)
         with pytest.raises(DatabaseRuntimeError, match="regular file"):
             open_readonly_database(sock_path)
     finally:

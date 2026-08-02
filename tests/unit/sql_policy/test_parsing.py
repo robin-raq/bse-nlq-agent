@@ -6,6 +6,7 @@ import hashlib
 import re
 
 import pytest
+import sqlglot
 from sqlglot.errors import ParseError
 
 from bse_nlq.sql_policy import (
@@ -19,6 +20,8 @@ from bse_nlq.sql_policy import (
 EMPTY_TABLES: frozenset[str] = frozenset()
 EMPTY_COLUMNS: frozenset[tuple[str, str]] = frozenset()
 EMPTY_VISIBLE: frozenset[tuple[str, str]] = frozenset()
+SQL_INPUT_LIMIT = 16_384
+SQL_AST_NODE_LIMIT = 512
 
 
 def _validate(sql: object) -> ValidatedSql:
@@ -131,6 +134,75 @@ def test_parse_error_becomes_invalid_sql_error_with_cause() -> None:
     assert len(message) < 200
     # Public message must not dump the full ANSI-colored parser dump.
     assert "\x1b[" not in message
+
+
+def test_sql_input_size_boundary_accepts_limit_and_rejects_next_character() -> None:
+    prefix = "SELECT '"
+    suffix = "'"
+    at_limit = prefix + ("x" * (SQL_INPUT_LIMIT - len(prefix) - len(suffix))) + suffix
+    above_limit = (
+        prefix + ("x" * (SQL_INPUT_LIMIT + 1 - len(prefix) - len(suffix))) + suffix
+    )
+    assert len(at_limit) == SQL_INPUT_LIMIT
+    assert len(above_limit) == SQL_INPUT_LIMIT + 1
+
+    assert _validate(at_limit).original_sql == at_limit
+    with pytest.raises(InvalidSqlError) as exc_info:
+        _validate(above_limit)
+
+    assert exc_info.value.reason is SqlRejectionReason.PARSE_ERROR
+    assert exc_info.value.__cause__ is None
+    assert "limit" in str(exc_info.value).lower()
+    assert len(str(exc_info.value)) < 200
+
+
+def test_ast_complexity_boundary_accepts_limit_and_rejects_next_node() -> None:
+    at_limit = "SELECT " + ", ".join("1" for _ in range(SQL_AST_NODE_LIMIT - 1))
+    above_limit = "SELECT " + ", ".join("1" for _ in range(SQL_AST_NODE_LIMIT))
+    assert sum(1 for _ in sqlglot.parse_one(at_limit, read="sqlite").walk()) == 512
+    assert sum(1 for _ in sqlglot.parse_one(above_limit, read="sqlite").walk()) == 513
+
+    assert _validate(at_limit).original_sql == at_limit
+    with pytest.raises(InvalidSqlError) as exc_info:
+        _validate(above_limit)
+
+    assert exc_info.value.reason is SqlRejectionReason.PARSE_ERROR
+    assert exc_info.value.__cause__ is None
+    assert "complex" in str(exc_info.value).lower()
+
+
+def test_parser_recursion_error_becomes_invalid_sql_error_with_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recursion_error = RecursionError("adversarial nesting")
+
+    def recurse(*args: object, **kwargs: object) -> list[object]:
+        raise recursion_error
+
+    monkeypatch.setattr(sqlglot, "parse", recurse)
+
+    with pytest.raises(InvalidSqlError) as exc_info:
+        _validate("SELECT 1")
+
+    assert exc_info.value.reason is SqlRejectionReason.PARSE_ERROR
+    assert exc_info.value.__cause__ is recursion_error
+    assert "complex" in str(exc_info.value).lower()
+
+
+def test_unexpected_parser_error_propagates_without_normalization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    programming_error = RuntimeError("parser integration defect")
+
+    def fail(*args: object, **kwargs: object) -> list[object]:
+        raise programming_error
+
+    monkeypatch.setattr(sqlglot, "parse", fail)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _validate("SELECT 1")
+
+    assert exc_info.value is programming_error
 
 
 def test_fingerprint_is_64_lowercase_hex() -> None:

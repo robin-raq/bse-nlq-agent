@@ -23,6 +23,9 @@ from bse_nlq.sql_policy.output_schemas import validate_internal_output_schemas
 from bse_nlq.sql_policy.scope_policy import authorize_physical_tables
 from bse_nlq.sql_policy.structure import apply_structure_policy
 
+_SQL_INPUT_CHARACTER_LIMIT = 16_384
+_SQL_AST_NODE_LIMIT = 512
+
 
 @dataclass(frozen=True, slots=True)
 class _PolicyInventories:
@@ -67,9 +70,19 @@ def validate_sql(
             "SQL is empty after trimming outer whitespace",
             reason=SqlRejectionReason.EMPTY_SQL,
         )
+    if len(original_sql) > _SQL_INPUT_CHARACTER_LIMIT:
+        raise InvalidSqlError(
+            "SQL exceeds the parser input limit",
+            reason=SqlRejectionReason.PARSE_ERROR,
+        )
 
     try:
         expressions = sqlglot.parse(original_sql, read="sqlite")
+    except RecursionError as error:
+        raise InvalidSqlError(
+            "SQL exceeds the parser complexity limit",
+            reason=SqlRejectionReason.PARSE_ERROR,
+        ) from error
     except ParseError as error:
         raise InvalidSqlError(
             "SQL could not be parsed",
@@ -89,6 +102,7 @@ def validate_sql(
         )
 
     expression = meaningful[0]
+    _enforce_ast_node_limit(expression)
     apply_structure_policy(expression)
     referenced_tables = authorize_physical_tables(
         expression, physical_tables=inventories.physical_tables
@@ -108,6 +122,15 @@ def validate_sql(
 
 def _normalize(expression: Expr) -> str:
     return expression.sql(dialect="sqlite", comments=False)
+
+
+def _enforce_ast_node_limit(expression: Expr) -> None:
+    for node_count, _ in enumerate(expression.walk(bfs=True), start=1):
+        if node_count > _SQL_AST_NODE_LIMIT:
+            raise InvalidSqlError(
+                "SQL exceeds the parser complexity limit",
+                reason=SqlRejectionReason.PARSE_ERROR,
+            )
 
 
 def _coerce_inventories(

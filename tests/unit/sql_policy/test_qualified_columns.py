@@ -205,13 +205,9 @@ def test_sqlglot_values_union_synthetic_star_remains_supported() -> None:
     assert result.referenced_columns == frozenset({("events", "id")})
 
 
-def test_unqualified_binding_remains_deferred_to_slice_4c() -> None:
-    result = _validate("SELECT missing, order_ref FROM orders")
-
-    assert result.referenced_columns == frozenset()
-
-
-def test_projection_alias_binding_remains_deferred_to_slice_4c() -> None:
+def test_order_by_alias_resolves_without_contributing_extra_column() -> None:
+    # Slice 4C: ORDER BY "value" resolves against the SELECT alias rather than
+    # an unqualified column lookup; referenced_columns is unaffected.
     result = _validate("SELECT e.id AS value FROM events AS e ORDER BY value")
 
     assert result.referenced_columns == frozenset({("events", "id")})

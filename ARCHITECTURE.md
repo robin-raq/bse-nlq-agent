@@ -57,11 +57,12 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
-- `bse_nlq.sql_policy` — Slices 1–4B: `validate_sql` / `ValidatedSql` with
+- `bse_nlq.sql_policy` — Slices 1–4C: `validate_sql` / `ValidatedSql` with
   bounded parsing, structure policy, physical-table authorization, canonical
   column inventories, internal CTE/derived/Union output-name schemas,
-  qualified-column binding/correlation, exclusions, canonical physical
-  `referenced_columns`, and `COUNT(*)`-only star policy
+  qualified/unqualified column binding and correlation, ORDER BY projection
+  aliases, exclusions, canonical physical `referenced_columns`, and
+  `COUNT(*)`-only star policy
 
 ## Model contract
 
@@ -127,8 +128,8 @@ after close.
 Remaining independent controls are still pending and must each be tested before
 model-generated SQL is executed:
 
-1. Schema-aware SQLGlot AST authorization for columns, stars, functions, and
-   dates on top of Slices 1–3 in `bse_nlq.sql_policy`.
+1. Schema-aware SQLGlot AST authorization for functions and dates on top of
+   Slices 1–4C in `bse_nlq.sql_policy` (columns and stars are complete).
 2. Default-deny SQLite authorizer.
 3. Progress-handler instruction budget.
 4. Result-row / column caps and controlled execution.
@@ -155,21 +156,31 @@ resolves qualified correlation through the nearest permitted lexical scope,
 rejects unknown qualifiers/columns and excluded physical columns, populates
 canonical physical `referenced_columns`, and rejects authored stars except
 `COUNT(*)`. SQLGlot's synthetic `VALUES` star remains distinguishable from
-authored SQL. It does **not** yet bind unqualified columns, implement
-unqualified correlation or projection-alias contexts, authorize functions, or
-authorize dates. Static policy uses the parsed
-SQLite AST, never regex or semicolon heuristics as the primary authority.
-Rejected SQL will expose `generated_sql` but leave `executed_sql` null. The
-complete SQL-safety foundation is not yet implemented.
+authored SQL. Slice 4C binds unqualified columns against sources local to
+the column's own scope only: more than one local candidate is
+`ambiguous_column`; exactly one binds through the same physical/internal
+authorization as the qualified path; zero local candidates is
+`unknown_column` and never climbs to an outer scope. An unqualified ORDER BY
+name that matches the immediately enclosing SELECT's own projection alias
+resolves to that alias — matching SQLite's own precedence — without
+contributing a physical identity; WHERE, JOIN ON, GROUP BY, and HAVING do not
+see alias binding. It does **not** yet authorize functions or dates. Static
+policy uses the parsed SQLite AST, never regex or semicolon heuristics as the
+primary authority. Rejected SQL will expose `generated_sql` but leave
+`executed_sql` null. The complete SQL-safety foundation is not yet
+implemented.
 
 Physical-source classification uses only `scope.sources`: `exp.Table` is a
 physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw
 `find_all(exp.Table)`, and `qualify()` are not authorization authorities.
-Slice 4C remains locked to local-ambiguity-first unqualified resolution,
-`COUNT(*)`-only stars, SQLite-compatible ASCII case-insensitive matching
+Unqualified resolution is locked to local-ambiguity-first, no-outer-climb
+semantics; ORDER BY alias resolution is the only projection-alias context
+supported. Column matching stays SQLite-compatible ASCII case-insensitive
 (non-ASCII code points preserved; no Unicode casefold) with
 inventory-canonical names, no rewrite of `original_sql`, and no in-place
-AST identifier mutation during authorization.
+AST identifier mutation during authorization. All 14 executable development
+anchors pass the complete static validator
+(`tests/unit/sql_policy/test_anchor_compatibility.py`).
 
 ## Data and prompting
 

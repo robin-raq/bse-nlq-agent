@@ -45,13 +45,30 @@ def test_parameters_rejected(sql: str) -> None:
         "SELECT '?'",
         "SELECT ':value'",
         "SELECT '@value'",
+    ],
+)
+def test_parameter_like_string_literals_accepted(sql: str) -> None:
+    result = validate(sql)
+    assert isinstance(result, ValidatedSql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
         'SELECT "$1"',
         'SELECT "$name"',
     ],
 )
-def test_parameter_like_literals_and_quoted_identifiers_accepted(sql: str) -> None:
-    result = validate(sql)
-    assert isinstance(result, ValidatedSql)
+def test_parameter_like_quoted_identifiers_not_misclassified_as_parameterized(
+    sql: str,
+) -> None:
+    # A double-quoted "$1" / "$name" is a column identifier, not a parameter;
+    # structure policy must not reject it as PARAMETERIZED_SQL. With no FROM
+    # clause it has no local source, so Slice 4C's unqualified-column binding
+    # now rejects it as UNKNOWN_COLUMN instead — proving the distinction.
+    with pytest.raises(SqlRejectedError) as exc_info:
+        validate(sql)
+    assert exc_info.value.reason is SqlRejectionReason.UNKNOWN_COLUMN
 
 
 def test_unsupported_root_beats_parameter_precedence() -> None:

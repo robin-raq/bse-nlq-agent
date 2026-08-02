@@ -6,7 +6,11 @@ import pytest
 from policy_test_helpers import EMPTY_COLUMNS, EMPTY_VISIBLE
 
 from bse_nlq.metadata.models import APPLICATION_TABLES, REQUIRED_SEMANTIC_COLUMNS
-from bse_nlq.sql_policy import ValidatedSql, validate_sql
+from bse_nlq.sql_policy import (
+    SqlRejectedError,
+    SqlRejectionReason,
+    validate_sql,
+)
 from bse_nlq.sql_policy.column_inventory import (
     CanonicalColumnInventory,
     canonicalize_column_inventories,
@@ -461,28 +465,31 @@ def test_validate_sql_rejects_visible_not_subset() -> None:
         )
 
 
-def test_validate_sql_keeps_referenced_columns_empty_with_real_inventory() -> None:
-    result = validate_sql(
-        "SELECT order_ref FROM orders",
-        physical_tables=PHYSICAL_TABLES,
-        physical_columns=REAL_PHYSICAL_COLUMNS,
-        prompt_visible_columns=REAL_VISIBLE_COLUMNS,
-    )
-    assert isinstance(result, ValidatedSql)
-    assert result.referenced_tables == frozenset({"orders"})
-    assert result.referenced_columns == frozenset()
-    assert result.referenced_functions == frozenset()
+def test_validate_sql_rejects_unqualified_excluded_column() -> None:
+    # Slice 4C binds unqualified columns; order_ref exists physically but is
+    # excluded from the prompt-visible inventory, so it is now rejected
+    # instead of silently passing through with an empty referenced_columns.
+    with pytest.raises(SqlRejectedError) as exc_info:
+        validate_sql(
+            "SELECT order_ref FROM orders",
+            physical_tables=PHYSICAL_TABLES,
+            physical_columns=REAL_PHYSICAL_COLUMNS,
+            prompt_visible_columns=REAL_VISIBLE_COLUMNS,
+        )
+    assert exc_info.value.reason is SqlRejectionReason.EXCLUDED_COLUMN
 
 
-def test_validate_sql_does_not_reject_unknown_sql_column_yet() -> None:
-    result = validate_sql(
-        "SELECT nonexistent_column FROM events",
-        physical_tables=PHYSICAL_TABLES,
-        physical_columns=REAL_PHYSICAL_COLUMNS,
-        prompt_visible_columns=REAL_VISIBLE_COLUMNS,
-    )
-    assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+def test_validate_sql_rejects_unknown_unqualified_column() -> None:
+    # Slice 4C binds unqualified columns against the local scope; an unknown
+    # name is now rejected instead of silently passing through.
+    with pytest.raises(SqlRejectedError) as exc_info:
+        validate_sql(
+            "SELECT nonexistent_column FROM events",
+            physical_tables=PHYSICAL_TABLES,
+            physical_columns=REAL_PHYSICAL_COLUMNS,
+            prompt_visible_columns=REAL_VISIBLE_COLUMNS,
+        )
+    assert exc_info.value.reason is SqlRejectionReason.UNKNOWN_COLUMN
 
 
 def test_validate_sql_does_not_expose_inventory_on_result() -> None:

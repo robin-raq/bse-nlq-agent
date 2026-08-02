@@ -79,6 +79,23 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
 - Unqualified local/outer binding, projection aliases, and mixed closure remain
   Slice 4C work.
 
+#### Locked U2 Slice 4C unqualified-column rules
+
+- An unqualified column binds only against sources local to its own scope
+  (`scope.sources`), never an outer scope, regardless of candidate count.
+  More than one local candidate is `ambiguous_column`; exactly one candidate
+  binds through the same physical/internal authorization the qualified path
+  uses (so `unknown_column` / `excluded_column` reasons stay consistent);
+  zero local candidates is `unknown_column`.
+- An unqualified name that appears inside ORDER BY and matches the
+  immediately enclosing SELECT's own projection alias resolves to that alias
+  — mirroring SQLite's own result-column-alias precedence — and contributes
+  no physical identity of its own. This is the only projection-alias context
+  implemented: WHERE, JOIN ON, GROUP BY, and HAVING never see alias binding.
+  Generalized outer-scope unqualified correlation is explicitly out of scope
+  for this take-home; qualified correlation (Slice 4B) is sufficient for the
+  planned product.
+
 ### Schema and dataset
 
 Full contract in [`schema-design.md`](schema-design.md).

@@ -27,7 +27,8 @@ AI assisted with:
 - test-first implementation of U2 Slice 2 structure policy (allowed SELECT/UNION roots, whole-tree forbidden constructs, recursive-CTE rejection, parameter rejection), including SQLGlot probes, red/green TDD, sixteen mutation checks, and installed-wheel validation without SQLite execution; and
 - test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution; and
 - test-first implementation of U2 Slice 4A canonical column inventories and internal CTE/derived/Union output-name schemas (single-writer lead plus read-only SQLGlot research, adversarial, and closure-audit agents), including SQLGlot/SQLite probes, red/green TDD, mutation checks, and installed-wheel validation without SQLite execution.
-- test-first implementation of U2 Slice 4B qualified physical/internal column binding, lexical qualified correlation, exclusions, canonical physical `referenced_columns`, and `COUNT(*)`-only star policy, including red/green boundary tests and preservation of the pinned SQLGlot `VALUES` rewrite.
+- test-first implementation of U2 Slice 4B qualified physical/internal column binding, lexical qualified correlation, exclusions, canonical physical `referenced_columns`, and `COUNT(*)`-only star policy, including red/green boundary tests and preservation of the pinned SQLGlot `VALUES` rewrite; and
+- test-first implementation of U2 Slice 4C unqualified column binding (local-scope, ambiguity-first, no outer climbing) and ORDER BY projection-alias resolution, including updating prior Slice 4A/4B tests whose assertions encoded the now-superseded deferred behavior, and an anchor-compatibility suite proving all 14 executable development anchors pass the complete static validator against the real packaged schema/metadata.
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -705,15 +706,34 @@ after a qualifier match, unknown qualifier versus unknown column diagnostics,
 prompt exclusions, canonical physical references, CTE/derived non-lateral
 boundaries, and expression contexts beyond projection. Authored bare and
 qualified stars are rejected while `COUNT(*)` and SQLGlot's pinned synthetic
-`VALUES` wrapper remain supported. Unqualified binding remains explicitly
-deferred to Slice 4C. No provider call, SQLite execution, or AST mutation was
-introduced. The focused suite is 26 tests; SQL-policy is 318 and the full
+`VALUES` wrapper remain supported. Unqualified binding was implemented in the
+following Slice 4C pass. No provider call, SQLite execution, or AST mutation
+was introduced. The focused suite is 26 tests; SQL-policy is 318 and the full
 offline suite is 867.
+
+### U2 Slice 4C — unqualified columns and ORDER BY aliases
+
+Implemented the candidate-approved local-ambiguity-first contract on the
+committed Slice 4B checkpoint. Unqualified references bind only against
+sources local to their own scope, sharing the same physical/internal
+authorization path as qualified binding so exclusion and unknown-column
+diagnostics stay consistent; more than one local candidate is
+`ambiguous_column`, zero never climbs to an outer scope. ORDER BY names
+matching the enclosing SELECT's own projection alias resolve to that alias
+without contributing a physical identity; WHERE/JOIN-ON/GROUP-BY/HAVING alias
+support was explicitly excluded as unneeded by the take-home anchors. Several
+Slice 4A/4B tests whose assertions encoded the prior "unqualified binding
+stays a no-op" behavior were updated with a documented reason rather than
+left to fail silently. A new anchor-compatibility suite runs all 14
+executable development anchors through `validate_sql` with the real packaged
+schema/metadata inventory. The focused suite is 25 tests (plus 14
+anchor-compatibility cases); SQL-policy is 342 and the full offline suite is
+891.
 
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4B are implemented and test-verified. Qualified physical/internal binding, qualified correlation, exclusions, canonical physical references, and star policy are present; unqualified binding, function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Generated database files remain untracked local artifacts. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4C are implemented and test-verified. Qualified/unqualified physical/internal binding, qualified correlation, ORDER BY aliases, exclusions, canonical physical references, and star policy are present; function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Generated database files remain untracked local artifacts. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

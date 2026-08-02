@@ -6,7 +6,6 @@ import hashlib
 
 import pytest
 import sqlglot
-from policy_test_helpers import EMPTY_COLUMNS, EMPTY_VISIBLE
 from sqlglot.optimizer.scope import traverse_scope
 
 from bse_nlq.sql_policy import (
@@ -24,13 +23,27 @@ INVENTORY: frozenset[str] = frozenset(
     {"venues", "events", "ticket_tiers", "orders", "order_items", "refunds"}
 )
 
+# Covers every unqualified column these output-schema tests select, so Slice
+# 4C unqualified binding does not mask the Slice 4A output-schema behavior
+# under test. order_ref is deliberately absent here; its exclusion is its own
+# dedicated test with its own inventory.
+PHYSICAL_COLUMNS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("events", "event_id"),
+        ("events", "name"),
+        ("orders", "order_id"),
+        ("orders", "status"),
+    }
+)
+VISIBLE_COLUMNS: frozenset[tuple[str, str]] = PHYSICAL_COLUMNS
+
 
 def _validate(sql: str) -> ValidatedSql:
     return validate_sql(
         sql,
         physical_tables=INVENTORY,
-        physical_columns=EMPTY_COLUMNS,
-        prompt_visible_columns=EMPTY_VISIBLE,
+        physical_columns=PHYSICAL_COLUMNS,
+        prompt_visible_columns=VISIBLE_COLUMNS,
     )
 
 
@@ -249,7 +262,9 @@ def test_non_ascii_output_names_remain_distinct() -> None:
         """
     )
     assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset(
+        {("events", "event_id"), ("events", "name")}
+    )
 
 
 # --- Red 8: Union schemas ---
@@ -312,7 +327,7 @@ def test_union_values_branch_marks_incomplete_not_false_arity() -> None:
 def test_union_values_single_column_accepted_as_incomplete() -> None:
     result = _validate("SELECT event_id FROM events UNION VALUES (1)")
     assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset({("events", "event_id")})
 
 
 def test_derived_union_values_marks_incomplete() -> None:
@@ -336,7 +351,9 @@ def test_parenthesized_union_still_uses_first_branch_names() -> None:
         "UNION ALL (SELECT order_id AS right_name FROM orders)"
     )
     assert result.referenced_tables == frozenset({"events", "orders"})
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset(
+        {("events", "event_id"), ("orders", "order_id")}
+    )
 
 
 def test_cte_union_explicit_names_override_branch_projections() -> None:
@@ -356,7 +373,14 @@ def test_cte_union_explicit_names_override_branch_projections() -> None:
     assert schema.folded_to_canonical["b"] == "b"
     result = _validate(sql)
     assert result.referenced_tables == frozenset({"events", "orders"})
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset(
+        {
+            ("events", "event_id"),
+            ("events", "name"),
+            ("orders", "order_id"),
+            ("orders", "status"),
+        }
+    )
 
 
 def test_cte_union_explicit_arity_mismatch_rejected() -> None:
@@ -452,7 +476,7 @@ def test_nested_cte_schemas_do_not_treat_cte_as_physical() -> None:
         """
     )
     assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset({("events", "event_id")})
 
 
 # --- Red 9: AST non-mutation ---
@@ -510,27 +534,36 @@ def test_validate_sql_rejects_ambiguous_internal_outputs() -> None:
     assert exc_info.value.reason is SqlRejectionReason.AMBIGUOUS_COLUMN
 
 
-def test_referenced_columns_remain_empty() -> None:
+def test_unqualified_columns_populate_referenced_columns() -> None:
+    # Slice 4C binds unqualified columns against the local scope; this
+    # replaces the earlier Slice 4A "stays empty" expectation.
     result = _validate("SELECT event_id, name FROM events")
-    assert result.referenced_columns == frozenset()
+    assert result.referenced_columns == frozenset(
+        {("events", "event_id"), ("events", "name")}
+    )
     assert result.referenced_functions == frozenset()
 
 
-def test_order_ref_sql_not_rejected_for_exclusion() -> None:
-    result = validate_sql(
-        "SELECT order_ref FROM orders",
-        physical_tables=INVENTORY,
-        physical_columns=frozenset({("orders", "order_ref"), ("orders", "status")}),
-        prompt_visible_columns=frozenset({("orders", "status")}),
-    )
-    assert result.referenced_tables == frozenset({"orders"})
-    assert result.referenced_columns == frozenset()
+def test_unqualified_order_ref_rejected_for_exclusion() -> None:
+    # Slice 4C binds unqualified columns; order_ref is physical but excluded
+    # from the prompt-visible inventory, so it is now rejected instead of
+    # silently passing through.
+    with pytest.raises(SqlRejectedError) as exc_info:
+        validate_sql(
+            "SELECT order_ref FROM orders",
+            physical_tables=INVENTORY,
+            physical_columns=frozenset({("orders", "order_ref"), ("orders", "status")}),
+            prompt_visible_columns=frozenset({("orders", "status")}),
+        )
+    assert exc_info.value.reason is SqlRejectionReason.EXCLUDED_COLUMN
 
 
-def test_unknown_sql_column_not_rejected_yet() -> None:
-    result = _validate("SELECT nonexistent FROM events")
-    assert result.referenced_tables == frozenset({"events"})
-    assert result.referenced_columns == frozenset()
+def test_unknown_unqualified_sql_column_rejected() -> None:
+    # Slice 4C binds unqualified columns against the local scope; an unknown
+    # name is now rejected instead of silently passing through.
+    with pytest.raises(SqlRejectedError) as exc_info:
+        _validate("SELECT nonexistent FROM events")
+    assert exc_info.value.reason is SqlRejectionReason.UNKNOWN_COLUMN
 
 
 def test_structure_precedence_beats_ambiguous_column() -> None:

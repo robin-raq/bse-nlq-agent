@@ -14,7 +14,7 @@ from bse_nlq.sql_policy.column_inventory import (
     canonicalize_column_inventories,
 )
 from bse_nlq.sql_policy.column_policy import (
-    authorize_qualified_columns,
+    authorize_columns,
     enforce_star_policy,
 )
 from bse_nlq.sql_policy.errors import (
@@ -56,11 +56,13 @@ def validate_sql(
     Accepts immutable inventories. ``physical_tables`` is authoritative for
     Slice 3 physical-source allowlisting. Column inventories are validated and
     canonicalized (Slice 4A). Internal CTE/derived/Union output-name schemas
-    are constructed for duplicate and arity checks. Qualified columns and
-    lexical qualified correlation are bound against physical/internal sources,
+    are constructed for duplicate and arity checks. Qualified and unqualified
+    columns are bound against physical/internal sources (Slice 4B/4C),
+    lexical qualified correlation and local-scope unqualified resolution are
+    applied, ORDER BY projection aliases resolve against the immediate SELECT,
     exclusions are enforced, and physical identities populate
-    ``referenced_columns`` (Slice 4B). Unqualified binding remains deferred.
-    Does not open SQLite or execute SQL.
+    ``referenced_columns``. Functions and dates remain deferred. Does not open
+    SQLite or execute SQL.
     """
     if not isinstance(sql, str):
         raise TypeError("sql must be str")
@@ -115,7 +117,7 @@ def validate_sql(
     )
     validate_internal_output_schemas(expression)
     enforce_star_policy(expression)
-    referenced_columns = authorize_qualified_columns(
+    referenced_columns = authorize_columns(
         expression,
         inventory=inventories.column_inventory,
     )

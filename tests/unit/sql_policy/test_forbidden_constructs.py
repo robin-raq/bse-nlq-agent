@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from policy_test_helpers import EMPTY_COLUMNS, EMPTY_VISIBLE, validate
+from policy_test_helpers import validate
 
 from bse_nlq.sql_policy import (
     SqlRejectedError,
@@ -203,10 +203,13 @@ def test_multiple_ctes_one_recursive_rejected() -> None:
 
 
 def test_identifier_named_update_not_forbidden() -> None:
+    # A keyword-named quoted identifier must not be misclassified as an
+    # UPDATE statement by the structure policy; an inventory entry keeps the
+    # Slice 4C unqualified-column check from masking that with UNKNOWN_COLUMN.
     result = validate_sql(
         'SELECT "update" FROM events',
         physical_tables=frozenset({"events"}),
-        physical_columns=EMPTY_COLUMNS,
-        prompt_visible_columns=EMPTY_VISIBLE,
+        physical_columns=frozenset({("events", "update")}),
+        prompt_visible_columns=frozenset({("events", "update")}),
     )
     assert isinstance(result, ValidatedSql)

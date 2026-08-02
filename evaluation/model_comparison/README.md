@@ -24,6 +24,13 @@ still defaults to `gpt-5-mini`.
   Responses API without a temperature parameter. Groq uses its OpenAI
   compatible Chat Completions endpoint with temperature 0. Both request strict
   JSON Schema output.
+- Comparative latency uses only answerable case and attempt pairs where both
+  providers returned a response. Failed-request latency and provider response
+  rate are reported separately, so fast failures cannot look like latency wins.
+- Structured-output validity is measured among provider responses. SQL-policy
+  acceptance is measured among generated-SQL decisions. Sanitized provider
+  failure notes retain only fixed HTTP or connection categories, never provider
+  text.
 
 The case taxonomy and semantic invariant identifiers are frozen in
 `manifest.json`. The runner records a source commit, prompt hash, schema hash,

@@ -31,6 +31,7 @@ class ProviderObservation:
     input_tokens: int | None
     output_tokens: int | None
     error_class: str | None = None
+    error_subtype: str | None = None
 
 
 class OpenAIComparisonGenerator:
@@ -78,7 +79,11 @@ class OpenAIComparisonGenerator:
                 "OpenAI provider request timed out"
             ) from error
         except APIError as error:
-            self._record_failure(started, "provider_transport")
+            self._record_failure(
+                started,
+                "provider_transport",
+                error_subtype=_safe_api_error_subtype(error),
+            )
             raise ProviderUnavailableError("OpenAI provider request failed") from error
 
         usage = getattr(response, "usage", None)
@@ -89,12 +94,19 @@ class OpenAIComparisonGenerator:
         )
         return str(response.output_text)
 
-    def _record_failure(self, started: float, error_class: str) -> None:
+    def _record_failure(
+        self,
+        started: float,
+        error_class: str,
+        *,
+        error_subtype: str | None = None,
+    ) -> None:
         self.last_observation = ProviderObservation(
             latency_ms=_elapsed_ms(started),
             input_tokens=None,
             output_tokens=None,
             error_class=error_class,
+            error_subtype=error_subtype,
         )
 
 
@@ -145,7 +157,11 @@ class GroqComparisonGenerator:
             self._record_failure(started, "timeout")
             raise ProviderUnavailableError("Groq provider request timed out") from error
         except APIError as error:
-            self._record_failure(started, "provider_transport")
+            self._record_failure(
+                started,
+                "provider_transport",
+                error_subtype=_safe_api_error_subtype(error),
+            )
             raise ProviderUnavailableError("Groq provider request failed") from error
 
         usage = getattr(response, "usage", None)
@@ -160,12 +176,19 @@ class GroqComparisonGenerator:
         content = choices[0].message.content
         return "" if content is None else str(content)
 
-    def _record_failure(self, started: float, error_class: str) -> None:
+    def _record_failure(
+        self,
+        started: float,
+        error_class: str,
+        *,
+        error_subtype: str | None = None,
+    ) -> None:
         self.last_observation = ProviderObservation(
             latency_ms=_elapsed_ms(started),
             input_tokens=None,
             output_tokens=None,
             error_class=error_class,
+            error_subtype=error_subtype,
         )
 
 
@@ -175,6 +198,22 @@ def _elapsed_ms(started: float) -> int:
 
 def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _safe_api_error_subtype(error: APIError) -> str:
+    """Return a fixed diagnostic label without provider text or payloads."""
+    status_code = getattr(error, "status_code", None)
+    if status_code == 400:
+        return "http_400_request_rejected"
+    if status_code in {401, 403}:
+        return "http_authentication_or_permission"
+    if status_code == 429:
+        return "http_429_rate_limit"
+    if isinstance(status_code, int) and 500 <= status_code <= 599:
+        return "http_5xx_provider_service"
+    if isinstance(status_code, int):
+        return "http_other_status"
+    return "connection_error"
 
 
 __all__ = [

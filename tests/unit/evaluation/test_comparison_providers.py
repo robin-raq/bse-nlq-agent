@@ -125,3 +125,4 @@ def test_groq_provider_error_maps_without_sensitive_text() -> None:
     assert len(completions.calls) == 1
     assert generator.last_observation is not None
     assert generator.last_observation.error_class == "provider_transport"
+    assert generator.last_observation.error_subtype == "connection_error"

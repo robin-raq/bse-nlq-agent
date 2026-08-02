@@ -169,6 +169,8 @@ def _run_attempt(
     }
     error_class = None if pipeline_passed else _failure_category(result, observation)
     notes: list[str] = []
+    if observation.error_subtype is not None:
+        notes.append(f"provider_error_{observation.error_subtype}")
     if result.generated_sql is not None and result.executed_sql is not None:
         if result.generated_sql != result.executed_sql:
             notes.append("generated_executed_sql_mismatch")
@@ -294,7 +296,10 @@ def _attempt_passed(attempt: AttemptRecord) -> bool:
 
 
 def _provider_metrics(
-    attempts: list[AttemptRecord], provider: ProviderName, answerable_count: int
+    attempts: list[AttemptRecord],
+    provider: ProviderName,
+    answerable_count: int,
+    paired_latency_keys: frozenset[tuple[str, int]],
 ) -> dict[str, Any]:
     provider_attempts = [item for item in attempts if item.provider == provider]
     answerable = [
@@ -314,10 +319,33 @@ def _provider_metrics(
         for case_id in behavior_case_ids
         if all(_attempt_passed(item) for item in behavior if item.case_id == case_id)
     )
-    latencies = [item.latency_ms for item in answerable]
-    inputs = [item.input_tokens for item in answerable if item.input_tokens is not None]
+    provider_responses = [
+        item
+        for item in answerable
+        if item.error_class not in {"provider_transport", "timeout"}
+    ]
+    sql_attempts = [
+        item for item in provider_responses if item.generated_sql is not None
+    ]
+    latencies = [
+        item.latency_ms
+        for item in answerable
+        if (item.case_id, item.attempt) in paired_latency_keys
+    ]
+    failed_latencies = [
+        item.latency_ms
+        for item in answerable
+        if item.error_class in {"provider_transport", "timeout"}
+    ]
+    inputs = [
+        item.input_tokens
+        for item in provider_responses
+        if item.input_tokens is not None
+    ]
     outputs = [
-        item.output_tokens for item in answerable if item.output_tokens is not None
+        item.output_tokens
+        for item in provider_responses
+        if item.output_tokens is not None
     ]
     total = len(answerable)
     first_passes = sum(_attempt_passed(item) for item in first)
@@ -325,23 +353,36 @@ def _provider_metrics(
         "first_attempt_answerable": f"{first_passes}/{answerable_count}",
         "stable_answerable": f"{stable_count}/{answerable_count}",
         "correct_attempts": f"{sum(_attempt_passed(i) for i in answerable)}/{total}",
+        "provider_response_rate": _rate(len(provider_responses), total),
         "structured_output_valid_rate": _rate(
-            sum(item.structured_output_valid for item in answerable), total
+            sum(item.structured_output_valid for item in provider_responses),
+            len(provider_responses),
+        ),
+        "invalid_structured_output_count": sum(
+            item.error_class == "invalid_structured_output" for item in answerable
         ),
         "policy_acceptance_rate": _rate(
-            sum(item.sql_policy_accepted for item in answerable), total
+            sum(item.sql_policy_accepted for item in sql_attempts), len(sql_attempts)
+        ),
+        "policy_rejection_count": sum(
+            item.error_class == "sql_policy_rejection" for item in answerable
         ),
         "execution_success_rate": _rate(
-            sum(item.execution_succeeded for item in answerable), total
+            sum(item.execution_succeeded for item in sql_attempts), len(sql_attempts)
         ),
         "answer_invariant_pass_rate": _rate(
             sum(item.answer_invariant_passed for item in answerable), total
         ),
         "behavior_passes": f"{behavior_pass_count}/{len(behavior_case_ids)}",
+        "latency_sample_size": len(latencies),
         "median_latency_ms": round(statistics.median(latencies)) if latencies else 0,
         "p95_latency_ms": _sample_percentile(latencies, 0.95),
         "minimum_latency_ms": min(latencies) if latencies else 0,
         "maximum_latency_ms": max(latencies) if latencies else 0,
+        "failed_request_count": len(failed_latencies),
+        "failed_request_median_latency_ms": (
+            round(statistics.median(failed_latencies)) if failed_latencies else None
+        ),
         "median_input_tokens": round(statistics.median(inputs)) if inputs else None,
         "median_output_tokens": round(statistics.median(outputs)) if outputs else None,
     }
@@ -356,6 +397,20 @@ def _sample_percentile(values: list[int], quantile: float) -> int:
         return 0
     ordered = sorted(values)
     return ordered[max(0, math.ceil(quantile * len(ordered)) - 1)]
+
+
+def _paired_response_keys(
+    attempts: list[AttemptRecord],
+) -> frozenset[tuple[str, int]]:
+    answerable = [item for item in attempts if item.category == "answerable_sql"]
+    keys: set[tuple[str, int]] = set()
+    for key in {(item.case_id, item.attempt) for item in answerable}:
+        pair = [item for item in answerable if (item.case_id, item.attempt) == key]
+        if len(pair) == 2 and all(
+            item.error_class not in {"provider_transport", "timeout"} for item in pair
+        ):
+            keys.add(key)
+    return frozenset(keys)
 
 
 def _disagreements(attempts: list[AttemptRecord]) -> list[dict[str, str]]:
@@ -399,23 +454,45 @@ def _recommendation(metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
         if openai_median
         else None
     )
-    equal_first = openai["first_attempt_answerable"] == groq["first_attempt_answerable"]
-    equal_stable = openai["stable_answerable"] == groq["stable_answerable"]
+    equal_first = _fraction_numerator(openai["first_attempt_answerable"]) == (
+        _fraction_numerator(groq["first_attempt_answerable"])
+    )
+    stable_no_lower = _fraction_numerator(groq["stable_answerable"]) >= (
+        _fraction_numerator(openai["stable_answerable"])
+    )
+    repeated_correctness_no_lower = _fraction_numerator(groq["correct_attempts"]) >= (
+        _fraction_numerator(openai["correct_attempts"])
+    )
     reliability_ok = (
-        groq["structured_output_valid_rate"] >= openai["structured_output_valid_rate"]
-        and groq["policy_acceptance_rate"] >= openai["policy_acceptance_rate"]
-        and groq["behavior_passes"] == openai["behavior_passes"]
+        groq["provider_response_rate"] >= openai["provider_response_rate"]
+        and groq["invalid_structured_output_count"]
+        <= openai["invalid_structured_output_count"]
+        and groq["policy_rejection_count"] <= openai["policy_rejection_count"]
+        and _fraction_numerator(groq["behavior_passes"])
+        >= _fraction_numerator(openai["behavior_passes"])
     )
     latency_ok = reduction is not None and reduction >= 50
     p95_ok = groq["p95_latency_ms"] < openai["p95_latency_ms"]
-    if equal_first and equal_stable and reliability_ok and latency_ok and p95_ok:
+    if (
+        equal_first
+        and stable_no_lower
+        and repeated_correctness_no_lower
+        and reliability_ok
+        and latency_ok
+        and p95_ok
+    ):
         decision = "recommend_groq_for_review"
         reason = (
             "Groq matched GPT-5 mini on answerable and behavioral reliability "
             f"and reduced median latency by {reduction}%. The product default "
             "remains unchanged."
         )
-    elif not equal_first or not equal_stable or not reliability_ok:
+    elif (
+        not equal_first
+        or not stable_no_lower
+        or not repeated_correctness_no_lower
+        or not reliability_ok
+    ):
         decision = "keep_openai"
         reason = (
             "Groq did not match GPT-5 mini on the conservative correctness or "
@@ -433,6 +510,11 @@ def _recommendation(metrics: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "latency_reduction_percent": reduction,
         "default_provider_changed": False,
     }
+
+
+def _fraction_numerator(value: str) -> int:
+    numerator, _, _ = value.partition("/")
+    return int(numerator)
 
 
 def _configuration(
@@ -535,8 +617,11 @@ def _report_payload(
 ) -> dict[str, Any]:
     serialized_attempts = [asdict(item) for item in attempts]
     answerable_count = sum(case.category == "answerable_sql" for case in manifest_cases)
+    paired_latency_keys = _paired_response_keys(attempts)
     metrics = {
-        provider: _provider_metrics(attempts, provider, answerable_count)
+        provider: _provider_metrics(
+            attempts, provider, answerable_count, paired_latency_keys
+        )
         for provider in ("openai", "groq")
     }
     failures = [
@@ -545,7 +630,7 @@ def _report_payload(
             "case_id": item.case_id,
             "attempt": item.attempt,
             "category": item.error_class,
-            "summary": "sanitized comparison failure",
+            "summary": item.notes[0] if item.notes else "sanitized comparison failure",
         }
         for item in attempts
         if item.error_class is not None
@@ -602,14 +687,15 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
         "## Aggregate results",
         "",
         "| provider | first attempt | stable cases | correct attempts | "
-        "structured valid | policy accepted | behavior |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "provider responses | structured valid | policy accepted | behavior |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for provider in ("openai", "groq"):
         item = metrics[provider]
         aggregate_row = (
             f"| {provider} | {item['first_attempt_answerable']} | "
             f"{item['stable_answerable']} | {item['correct_attempts']} | "
+            f"{item['provider_response_rate']:.1%} | "
             f"{item['structured_output_valid_rate']:.1%} | "
             f"{item['policy_acceptance_rate']:.1%} | "
             f"{item['behavior_passes']} |"
@@ -629,7 +715,8 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
         for item in payload["failures"]:
             lines.append(
                 f"- {item['provider']} `{item['case_id']}` attempt "
-                f"{item['attempt']}: `{item['category']}`."
+                f"{item['attempt']}: `{item['category']}` "
+                f"(`{item['summary']}`)."
             )
     else:
         lines.append("No failed attempts.")
@@ -638,22 +725,27 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
             "",
             "## Latency comparison",
             "",
-            "| provider | median ms | p95 ms | min ms | max ms |",
-            "|---|---:|---:|---:|---:|",
+            "| provider | paired responses | median ms | p95 ms | min ms | "
+            "max ms | failed requests | failed median ms |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for provider in ("openai", "groq"):
         item = metrics[provider]
         lines.append(
-            f"| {provider} | {item['median_latency_ms']} | "
+            f"| {provider} | {item['latency_sample_size']} | "
+            f"{item['median_latency_ms']} | "
             f"{item['p95_latency_ms']} | {item['minimum_latency_ms']} | "
-            f"{item['maximum_latency_ms']} |"
+            f"{item['maximum_latency_ms']} | {item['failed_request_count']} | "
+            f"{item['failed_request_median_latency_ms']} |"
         )
     lines.extend(
         [
             "",
-            "The p95 is the nearest-rank sample percentile over all answerable "
-            "provider requests. Warm-ups are excluded.",
+            "Latency comparisons use only answerable case and attempt pairs "
+            "where both providers returned a response. Failed request latency "
+            "is reported separately. The p95 is the nearest-rank sample "
+            "percentile. Warm-ups are excluded.",
             "",
             "## Token comparison",
             "",

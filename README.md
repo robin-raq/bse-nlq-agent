@@ -167,12 +167,12 @@ JSON Schema as strict structured output — implemented, selected, and
 verified with live calls (see
 [Example interactions](#example-interactions-the-three-prd-assignment-questions-run-live)
 and [Evaluation](#evaluation)). A controlled comparison against Groq-hosted
-`openai/gpt-oss-120b` kept OpenAI as the default: GPT-5 mini passed 24/24
-answerable attempts and 4/4 behavioral cases, while Groq passed 7/24 and 1/4
-under the same prompt and pipeline, including 22 HTTP 429 failures across all
-live attempts. Groq was 81.7% faster on the eight paired successful responses,
-but that did not offset its reliability and policy regressions. See the
-[comparison report](evaluation/model_comparison/results/comparison-2026-08-02.md).
+`openai/gpt-oss-120b` kept OpenAI as the default. The original bursty run hit
+22 HTTP 429s; a separate quota-compliant rerun eliminated provider errors and
+reduced median API latency from 8,474 ms to 1,871 ms, but scored 16/17 completed
+answerable attempts and 7/8 stable cases after one unchanged-policy rejection.
+Behavior remained 4/4. See the [paced report](evaluation/model_comparison/results/comparison-2026-08-02-groq-paced.md)
+and preserved [original report](evaluation/model_comparison/results/comparison-2026-08-02.md).
 No provider failover, fallback model, or model voting was added.
 
 ## Safety
@@ -305,7 +305,7 @@ uv run mypy src
 
 The offline suite covers deterministic data, strict model decisions, SQL
 authorization, controlled execution, rendering, terminal-state mapping, and
-CLI behavior. The final verified run passed 982 tests without network access
+CLI behavior. The final verified run passed 989 tests without network access
 or API credentials.
 
 ## Limitations

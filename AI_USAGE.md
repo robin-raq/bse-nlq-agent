@@ -24,10 +24,25 @@ correctness gate and sanitized HTTP failure categories.
 Validation used the offline reference evaluator, focused mocked provider and
 scoring tests, the full pytest suite, Ruff lint and format checks, mypy, `uv
 lock --check`, `git diff --check`, staged secret scans, and isolated wheel
-installation. The controlled rerun supported `keep_openai`: Groq was much
-faster on paired successful calls, but its HTTP 429 failures and one
-policy-rejected SQL attempt failed the correctness and reliability gates. The
-default provider was not changed.
+installation.
+
+After the original run was dominated by HTTP 429s, Codex added a separate
+Groq-only runner with the user-supplied 30 RPM / 8,000 TPM / 200,000 TPD limits.
+It used a monotonic 65-second start interval, no retries, a 150,000-token local
+cap, and 20,000 tokens of reserved daily headroom. The live command sourced the
+ignored primary-checkout `.env` only inside its subshell and reused the frozen
+OpenAI baseline after all prompt, schema, case-set, and database hashes matched.
+The 22-call run used 110,166 actual tokens: Groq returned valid structured
+output on every call, had no transport errors, passed behavior 4/4, reduced
+median API latency to 1,871 ms, and scored 16/17 completed answerable attempts
+and 7/8 stable cases after one SQL-policy rejection. The recommendation remains
+`keep_openai`; the default provider was not changed.
+
+The live entry point was `uv run python
+evaluation/model_comparison/compare_groq_paced.py` with explicit JSON,
+Markdown, prior-result, and `--daily-tokens-available-at-start 200000`
+arguments. Validation reran the focused comparison tests and full offline suite,
+then Ruff, mypy, lock, diff, artifact-integrity, pacing, and secret checks.
 
 ## Tools
 

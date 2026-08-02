@@ -467,8 +467,9 @@ def _recommendation(metrics: dict[str, Any], openai: dict[str, Any]) -> dict[str
     ):
         decision = "keep_openai"
         reason = (
-            "Groq did not match the frozen GPT-5 mini correctness, stability, "
-            "policy, or behavior gates; latency does not justify a switch."
+            "Groq matched the behavioral and paced-provider reliability gates, "
+            "but did not match the frozen GPT-5 mini completed-generation "
+            "accuracy, stable-case, or SQL-policy compatibility gates."
         )
     else:
         decision = "inconclusive_more_data_needed"
@@ -495,6 +496,7 @@ def _payload(
     warmup: dict[str, Any],
     targeted_calls: int,
     experiment_started: float,
+    experiment_started_utc: datetime,
     original_sha256: str,
 ) -> dict[str, Any]:
     metrics = _metrics(attempts)
@@ -502,7 +504,8 @@ def _payload(
     total_wait_ms = warmup.get("intentional_wait_ms", 0) + sum(
         item.intentional_wait_ms for item in attempts
     )
-    wall_clock_seconds = time.monotonic() - experiment_started
+    monotonic_active_seconds = time.monotonic() - experiment_started
+    wall_clock_seconds = (datetime.now(UTC) - experiment_started_utc).total_seconds()
     return {
         "status": status,
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -547,6 +550,7 @@ def _payload(
         },
         "timing": {
             "total_wall_clock_minutes": round(wall_clock_seconds / 60, 3),
+            "total_monotonic_active_minutes": round(monotonic_active_seconds / 60, 3),
             "total_intentional_wait_minutes": round(total_wait_ms / 60_000, 3),
         },
         "baseline": {
@@ -651,9 +655,13 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
             f"{payload['timing']['total_intentional_wait_minutes']} minutes",
             f"- total wall-clock experiment: "
             f"{payload['timing']['total_wall_clock_minutes']} minutes",
+            f"- monotonic active elapsed time: "
+            f"{payload['timing']['total_monotonic_active_minutes']} minutes",
             "",
             "Intentional pacing is excluded from API latency. The raw API latency "
             "does not represent throughput for repeated CLI requests at this quota.",
+            "The wall-clock and monotonic elapsed totals diverged during one "
+            "inter-request gap; both are retained as separate observations.",
             "",
             "## Comparison",
             "",
@@ -680,7 +688,7 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
             "",
             "## Limitations",
             "",
-            "This is a small evaluation on one deterministic dataset. The free-tier "
+            "This is a small evaluation on one deterministic dataset. The supplied "
             "quota required a long inter-request schedule, safe reset metadata was "
             "not exposed, and no production rate limiter was added.",
             "",
@@ -750,6 +758,7 @@ def main(argv: list[str] | None = None) -> int:
     attempts: list[PacedAttempt] = []
     targeted_calls = 0
     experiment_started = time.monotonic()
+    experiment_started_utc = datetime.now(UTC)
 
     with open_readonly_database(database_path) as database:
         configuration = _configuration(
@@ -836,6 +845,7 @@ def main(argv: list[str] | None = None) -> int:
             warmup=warmup,
             targeted_calls=targeted_calls,
             experiment_started=experiment_started,
+            experiment_started_utc=experiment_started_utc,
             original_sha256=original_sha256,
         )
         _write_json(args.json_output, running_payload, first_write=True)
@@ -871,6 +881,7 @@ def main(argv: list[str] | None = None) -> int:
                     warmup=warmup,
                     targeted_calls=targeted_calls,
                     experiment_started=experiment_started,
+                    experiment_started_utc=experiment_started_utc,
                     original_sha256=original_sha256,
                 ),
                 first_write=False,
@@ -905,6 +916,7 @@ def main(argv: list[str] | None = None) -> int:
                     warmup=warmup,
                     targeted_calls=targeted_calls,
                     experiment_started=experiment_started,
+                    experiment_started_utc=experiment_started_utc,
                     original_sha256=original_sha256,
                 ),
                 first_write=False,
@@ -920,6 +932,7 @@ def main(argv: list[str] | None = None) -> int:
         warmup=warmup,
         targeted_calls=targeted_calls,
         experiment_started=experiment_started,
+        experiment_started_utc=experiment_started_utc,
         original_sha256=original_sha256,
     )
     if _sha256_file(args.prior_result) != original_sha256:

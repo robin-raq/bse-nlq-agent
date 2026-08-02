@@ -89,7 +89,11 @@ Malformed or contradictory envelopes raise `InvalidModelOutputError`, which maps
 
 Adapter contract for raw model responses: pass the provider's response text to `parse_model_decision_json`. Do not `json.loads` and then call `validate_model_decision` for raw provider payloads—ordinary JSON decoding collapses duplicate keys before validation can reject them. Runtime code must construct `ModelDecision` through validation rather than by instantiating the dataclass directly.
 
-The MVP endpoint is GPT-5 mini through OpenAI Responses. The comparison candidate is `openai/gpt-oss-120b` through Groq Chat Completions. Both passed endpoint compatibility checks; neither has been evaluated for SQL quality.
+The MVP endpoint is GPT-5 mini through OpenAI Responses. The evaluation-only
+comparison candidate is `openai/gpt-oss-120b` through Groq Chat Completions;
+it is not a runtime provider option. Both accept the same strict decision
+schema, and their comparative results are recorded in the model-comparison
+reports without changing this boundary.
 
 ## SQL safety
 

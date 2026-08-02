@@ -30,6 +30,16 @@ execution boundary — only the model call is mocked. A live smoke test is
 pending: this sandbox has neither `OPENAI_API_KEY` set nor outbound network
 access, so it could not be attempted here.
 
+A compact 13-question evaluation set (`evaluation/`) covers count, sum,
+average, ranking, join, gross revenue, net revenue, an explicit date range,
+clarification, unsupported, an unsafe-injection-pressure case, an
+empty-result case, and malformed model output. `evaluation/run.py` runs it
+in reference mode (a fake generator returns hand-authored correct SQL,
+evaluating the pipeline downstream of the model) or `--live` mode (real
+model, requires credentials/network). Reference-mode result: 13/13 passed.
+See `evaluation/results.md` for the honest scope of what that does and does
+not establish.
+
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
 
 No end-to-end application feature path exists yet: a user cannot submit a question through a service/CLI that calls a provider or executes generated SQL. A developer may build a local untracked database file and open it read-only; that is not the product ask path.
@@ -94,17 +104,13 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-A compact evaluation set (12-15 questions) run against the real end-to-end
-flow, covering count/sum/average/ranking/join/gross/net/date-range plus one
-clarification, one unsupported, one unsafe/injection-pressure, and one
-empty-result case.
+Reviewer-facing README finalization: setup, usage, architecture overview,
+model choice, evaluation summary, limitations, and tradeoffs.
 
 ## Subsequent sequence
 
-1. Compact evaluation set against the real end-to-end flow (next).
+1. Reviewer-facing README finalization (next).
 2. Live OpenAI smoke test when `OPENAI_API_KEY` and network access are both available (blocked in this sandbox on both counts).
-3. Reviewer-facing README finalization.
-5. Reviewer-facing README finalization.
 
 ## Active blockers
 
@@ -132,16 +138,18 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Evaluation cases, evaluation results, final model selection, and the live
-provider smoke test (blocked in this sandbox: no `OPENAI_API_KEY`, no
-outbound network).
+Final model selection and the live provider smoke test (blocked in this
+sandbox: no `OPENAI_API_KEY`, no outbound network). The reviewer-facing
+README has not yet been finalized.
 
 Implemented and test-verified: the physical schema DDL, deterministic seed
 loader, persistent builder, read-only runtime factory, semantic metadata
 sidecar, `ModelDecision` validation, deterministic prompt builder, the
 complete SQL-policy Slices 1–4D, U3 controlled execution
-(`execute_validated_sql` / `RawQueryResult`), and the end-to-end
-`QueryService` / `bse-nlq ask` CLI / OpenAI adapter (`src/bse_nlq/service.py`,
-`src/bse_nlq/cli.py`, `src/bse_nlq/provider_openai.py`). All 14 executable
-development anchors pass the complete static validator and execute correctly
-end to end. Generated database files remain local and untracked.
+(`execute_validated_sql` / `RawQueryResult`), the end-to-end `QueryService` /
+`bse-nlq ask` CLI / OpenAI adapter (`src/bse_nlq/service.py`,
+`src/bse_nlq/cli.py`, `src/bse_nlq/provider_openai.py`), and the compact
+reference-mode evaluation set (`evaluation/`, 13/13 passed). All 14
+executable development anchors pass the complete static validator and
+execute correctly end to end. Generated database files remain local and
+untracked.

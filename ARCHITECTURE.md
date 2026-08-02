@@ -1,14 +1,15 @@
 # Architecture
 
-> Approved target design. Schema, seed, semantic metadata, ModelDecision
+> Approved target design. The full vertical flow is implemented and
+> test-verified offline: schema, seed, semantic metadata, `ModelDecision`
 > validation, deterministic prompt construction, the persistent database
-> builder, and the read-only runtime factory are implemented; SQL-policy
-> Slices 1–3 (`bse_nlq.sql_policy`) cover single-statement
-> parse/normalize/fingerprint, structure policy, and physical-table
-> authorization via SQLGlot `scope.sources` with canonical
-> `referenced_tables`. Column/star/function/date authorization, authorizer,
-> progress/result limits, controlled execution, provider adapters,
-> QueryService, and the product CLI remain pending.
+> builder, the read-only runtime factory, the complete SQL-policy
+> foundation (`bse_nlq.sql_policy`: parsing, structure, table/column/star/
+> function authorization), the default-deny SQLite authorizer and controlled
+> execution boundary (`bse_nlq.db.execution`), `QueryService`
+> (`bse_nlq.service`), the OpenAI adapter (`bse_nlq.provider_openai`), and
+> the `bse-nlq ask` CLI (`bse_nlq.cli`). Only evaluation and a live provider
+> smoke test remain.
 
 ## Principles
 
@@ -203,6 +204,54 @@ inventory-canonical names, no rewrite of `original_sql`, and no in-place
 AST identifier mutation during authorization. All 14 executable development
 anchors pass the complete static validator
 (`tests/unit/sql_policy/test_anchor_compatibility.py`).
+
+## Query service and CLI
+
+`bse_nlq.service.answer_question` is the single orchestrator (D-008: one
+service for every mode). Pipeline: `PromptInput` -> `build_prompt` -> exactly
+one `generator.complete()` call -> `parse_model_decision_json` ->
+`ModelDecision` branch -> `validate_sql` -> `execute_validated_sql` ->
+`render_result` -> `QueryResult`. No retry, repair, or second semantic
+attempt anywhere in this path.
+
+`QueryResult.terminal_state` is a closed `TerminalState` enum matching the
+project's frozen terminal-state contract
+(`docs/planning/architecture-workshop.local.md` D-007 §18): `answered`,
+`answered_empty`, `clarification_required`, `unsupported`,
+`invalid_model_output`, `query_rejected`, `invalid_sql`,
+`execution_limit_exceeded`, `execution_error`, `provider_unavailable`,
+`internal_error`. `result_truncated` is the one state from that contract
+intentionally not implemented: U3 hard-rejects row/column overflow rather
+than truncating, so it is unreachable by design. `generated_sql` is set
+whenever the model produced SQL, even if later rejected; `executed_sql` is
+set only once SQL was submitted to SQLite, and is always byte-identical to
+`generated_sql`. Only the outermost `answer_question` catches a bare
+`Exception`, mapping any unexpected failure to `internal_error`; every more
+specific failure is handled by its own typed exception first.
+
+Rendering (`render_result`) is deliberately narrow: empty result, one scalar
+(currency when the column name ends in the project's `_cents` convention,
+otherwise a plain number or string), one aggregate row, and multiple
+rows as a small table. No semantic type inference or narrative generation;
+a column not ending in `_cents` renders its raw value rather than a guessed
+unit.
+
+`bse_nlq.provider_openai.OpenAIRawGenerator` is the one production
+`RawModelGenerator`: GPT-5 mini via the OpenAI Responses API, requesting
+`model_decision_json_schema()` as strict structured output. Every
+`openai.APIError` (connection, timeout, rate limit, service, or auth
+failure) maps to `ProviderUnavailableError` -> `provider_unavailable`; the
+SDK's own bounded transport retries are the only retry behavior. No second
+provider, no failover, no model selection logic.
+
+`bse_nlq.cli` (`bse-nlq ask "question"`, `[project.scripts]` entry point) is
+a thin wrapper: argument parsing, database-path resolution
+(`--db` / `$BSE_NLQ_DB` / `./bse_nlq.db`), and output rendering only. A
+missing `OPENAI_API_KEY` is checked before any database or provider access
+and fails closed with a clear message and no network attempt. Generated and
+executed SQL are shown as deliberate user-facing output (transparency), not
+logged as a diagnostic; API keys, full prompts, raw provider responses,
+questions, and raw SQL/rows are never logged by default.
 
 ## Data and prompting
 

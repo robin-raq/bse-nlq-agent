@@ -12,6 +12,9 @@ dependencies = [
     "sqlglot==30.14.0",
 ]
 
+[project.scripts]
+bse-nlq = "bse_nlq.cli:main"
+
 [dependency-groups]
 dev = [
     "hatchling==1.31.0",

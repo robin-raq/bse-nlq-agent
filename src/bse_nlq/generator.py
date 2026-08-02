@@ -14,6 +14,18 @@ from bse_nlq.decision.validate import parse_model_decision_json
 from bse_nlq.prompt.models import BuiltPrompt, PromptInput
 
 
+class ProviderUnavailableError(Exception):
+    """Raised by a ``RawModelGenerator`` for a transport-level failure.
+
+    Covers timeout, connection failure, rate limiting, provider service
+    error, and authentication/authorization failure (D-007 §20). Adapters
+    raise this after their own bounded transport retries are exhausted; it
+    is never raised for a malformed or contradictory response body, which is
+    ``InvalidModelOutputError``'s concern instead. Maps to the frozen
+    ``provider_unavailable`` terminal state.
+    """
+
+
 class QueryGenerator(Protocol):
     """One semantic generation attempt: prompt input to ModelDecision."""
 
@@ -45,6 +57,7 @@ def decide_from_raw_generator(
 
 
 __all__ = [
+    "ProviderUnavailableError",
     "QueryGenerator",
     "RawModelGenerator",
     "decide_from_raw_generator",

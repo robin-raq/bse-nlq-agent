@@ -6,24 +6,29 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-U3 (default-deny SQLite authorizer and controlled execution) is implemented
-and test-first verified offline on top of the committed `ce3284f` checkpoint
-(the complete Slice 1–4D static SQL-safety policy). `execute_validated_sql`
-in `src/bse_nlq/db/execution.py` accepts only `ValidatedSql` and executes
-`original_sql` against a `ReadOnlyDatabase`. A `sqlite3.Connection` authorizer
-allows exactly `SQLITE_SELECT` unconditionally, `SQLITE_READ` only for the
-query's own `referenced_tables`/`referenced_columns`, and `SQLITE_FUNCTION`
-only for the same fixed allowlist the static policy already enforces; every
-other action code — writes, schema changes, PRAGMA, ATTACH/DETACH,
-transactions, recursive CTEs, and unknown codes — is denied by a single
-catch-all default-deny branch. A progress handler bounds total VDBE
-instructions; row/column counts are hard-capped with overflow rejection, not
-truncation. Both callbacks are installed immediately before execution and
-removed in `finally`. Result: `RawQueryResult(columns, rows)`, an immutable
-frozen dataclass. **The application's core safety boundary — static SQL
-policy plus controlled execution — is now complete.** No QueryService,
-provider adapter, or product CLI is implemented yet; that is the immediate
-next objective.
+The end-to-end NLQ product now works, offline and mocked, on top of the
+committed `6337d0b` checkpoint (the complete static SQL-safety policy plus
+U3 controlled execution). `src/bse_nlq/service.py` orchestrates
+question -> prompt -> one model generation -> `ModelDecision` validation ->
+SQL validation -> `execute_validated_sql` -> deterministic rendering ->
+`QueryResult`, using the project's frozen terminal-state contract (D-007
+§18: `answered`, `answered_empty`, `clarification_required`, `unsupported`,
+`invalid_model_output`, `query_rejected`, `invalid_sql`,
+`execution_limit_exceeded`, `execution_error`, `provider_unavailable`,
+`internal_error`; `result_truncated` is intentionally omitted — U3 hard-
+rejects overflow rather than truncating, so that state is unreachable).
+`src/bse_nlq/cli.py` provides `bse-nlq ask "question"` (`[project.scripts]`
+entry point) as a thin wrapper: it shows the generated/executed SQL,
+resolves the database path from `--db` / `$BSE_NLQ_DB` / `./bse_nlq.db`, and
+fails closed with a clear message (no network attempt) when
+`OPENAI_API_KEY` is unset. `src/bse_nlq/provider_openai.py` is the one
+production adapter (GPT-5 mini via the OpenAI Responses API, strict
+JSON-Schema structured output); every `openai.APIError` maps to
+`provider_unavailable`. The full vertical flow is verified with a fake
+generator against the real seeded database, real SQL policy, and real
+execution boundary — only the model call is mocked. A live smoke test is
+pending: this sandbox has neither `OPENAI_API_KEY` set nor outbound network
+access, so it could not be attempted here.
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
 
@@ -79,7 +84,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 367 SQL-policy under `tests/unit/sql_policy/` (Slices 1–4D); 403 under `tests/unit/db` (includes persistent-build, runtime, and U3 authorizer/execution coverage: 9 execution + 9 authorizer); 934 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 367 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 959 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -89,22 +94,24 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-The end-to-end mocked NLQ vertical flow: question → deterministic prompt →
-fake `ModelDecision` → SQL validation → `execute_validated_sql` → rendering →
-terminal result → `bse-nlq ask` CLI output with SQL shown. A live OpenAI
-adapter follows only after the mocked path works end to end.
+A compact evaluation set (12-15 questions) run against the real end-to-end
+flow, covering count/sum/average/ranking/join/gross/net/date-range plus one
+clarification, one unsupported, one unsafe/injection-pressure, and one
+empty-result case.
 
 ## Subsequent sequence
 
-1. Mocked end-to-end `QueryService` (fake provider) → deterministic rendering → terminal-state mapping.
-2. `bse-nlq ask` CLI, working against the mocked provider first.
-3. Live OpenAI adapter behind the existing narrow `RawModelGenerator` protocol; one live smoke test when credentials are available.
-4. Compact evaluation set (12-15 questions) against the real end-to-end flow.
+1. Compact evaluation set against the real end-to-end flow (next).
+2. Live OpenAI smoke test when `OPENAI_API_KEY` and network access are both available (blocked in this sandbox on both counts).
+3. Reviewer-facing README finalization.
 5. Reviewer-facing README finalization.
 
 ## Active blockers
 
-None.
+The live OpenAI smoke test cannot run in this sandbox: `OPENAI_API_KEY` is
+not set and outbound network access is blocked. The mocked end-to-end flow,
+CLI, and test suite are unaffected — none of them require credentials or
+network.
 
 Model quality and final selection are intentionally blocked on the frozen evaluation, not on missing access or endpoint compatibility.
 
@@ -125,22 +132,16 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Provider adapters, QueryService, result formatting, product CLI, evaluation
-cases, evaluation results, and final model selection.
+Evaluation cases, evaluation results, final model selection, and the live
+provider smoke test (blocked in this sandbox: no `OPENAI_API_KEY`, no
+outbound network).
 
-The physical schema DDL (`apply_schema`), deterministic seed loader
-(`load_seed_data`), persistent builder (`build_database`), read-only runtime
-factory (`open_readonly_database`), semantic metadata sidecar
-(`load_semantic_metadata`), ModelDecision validation
-(`parse_model_decision_json`), deterministic prompt builder
-(`build_prompt`), the complete SQL-policy Slices 1–4D (`validate_sql` /
-`ValidatedSql` with bounded parsing, structure/table policy, canonical column
-inventories, internal output schemas, qualified/unqualified column binding
-and correlation, ORDER BY projection aliases, exclusions, canonical physical
-references, star policy, and a fixed function/machine-clock allowlist), and
-U3 controlled execution (`execute_validated_sql` / `RawQueryResult` in
-`src/bse_nlq/db/execution.py` with a default-deny SQLite authorizer,
-progress-handler opcode budget, and row/column caps) are implemented and
-test-verified. All 14 executable development anchors pass the complete
-static validator and execute correctly end to end. Generated database files
-remain local and untracked. No provider adapter or product CLI exists yet.
+Implemented and test-verified: the physical schema DDL, deterministic seed
+loader, persistent builder, read-only runtime factory, semantic metadata
+sidecar, `ModelDecision` validation, deterministic prompt builder, the
+complete SQL-policy Slices 1–4D, U3 controlled execution
+(`execute_validated_sql` / `RawQueryResult`), and the end-to-end
+`QueryService` / `bse-nlq ask` CLI / OpenAI adapter (`src/bse_nlq/service.py`,
+`src/bse_nlq/cli.py`, `src/bse_nlq/provider_openai.py`). All 14 executable
+development anchors pass the complete static validator and execute correctly
+end to end. Generated database files remain local and untracked.

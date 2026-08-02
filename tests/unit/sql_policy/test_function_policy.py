@@ -133,3 +133,52 @@ def test_explicit_date_literal_comparison_needs_no_function_and_is_unaffected() 
     result = _validate("SELECT id FROM events WHERE id > 0")
 
     assert result.referenced_functions == frozenset()
+
+
+def test_case_when_null_guard_is_allowed_and_not_treated_as_a_function() -> None:
+    # exp.Case is Func-derived in this SQLGlot version (like And/Or/Exists),
+    # so a naive walk wrongly rejected this exact shape when a live GPT-5
+    # mini response used it as a correct, business-rule-compliant NULL-guard
+    # for average ticket price ((2a+b)/(2b) round-half-up over zero tickets).
+    sql = """
+        WITH totals AS (
+            SELECT SUM(oi.amount) AS amount, COUNT(*) AS n FROM orders oi
+        )
+        SELECT
+            CASE WHEN n IS NULL OR n = 0 THEN NULL
+                 ELSE (2 * amount + n) / (2 * n)
+            END AS avg_cents
+        FROM totals
+    """
+    result = _validate(sql)
+
+    assert result.referenced_functions == frozenset({"SUM", "COUNT"})
+
+
+def test_forbidden_function_nested_inside_case_branch_is_still_rejected() -> None:
+    sql = "SELECT CASE WHEN id > 0 THEN AVG(amount) ELSE 0 END FROM orders"
+
+    assert _rejection_reason(sql) is SqlRejectionReason.FORBIDDEN_FUNCTION
+
+
+def test_cast_is_allowed_and_not_treated_as_a_function() -> None:
+    # exp.Cast is also Func-derived in this SQLGlot version. A second,
+    # separately nondeterministic live GPT-5 mini generation for the same
+    # average-ticket-price question used CAST(...AS INTEGER) instead of the
+    # CASE-only NULL-guard and was wrongly rejected before this exclusion.
+    sql = """
+        SELECT CASE
+            WHEN SUM(oi.amount) IS NULL THEN NULL
+            ELSE CAST(SUM(oi.amount) / 2 AS INTEGER)
+        END AS half_total
+        FROM orders oi
+    """
+    result = _validate(sql)
+
+    assert result.referenced_functions == frozenset({"SUM"})
+
+
+def test_forbidden_function_nested_inside_cast_is_still_rejected() -> None:
+    sql = "SELECT CAST(AVG(amount) AS INTEGER) FROM orders"
+
+    assert _rejection_reason(sql) is SqlRejectionReason.FORBIDDEN_FUNCTION

@@ -62,6 +62,18 @@ def _is_non_function_syntax(node: exp.Func) -> bool:
     every ``AND``/``OR`` in the tree. ``exp.Exists`` is genuine function-call
     syntax but is a structural subquery predicate the already-committed
     Slice 4B qualified-correlation policy depends on, not a value-computing
-    call this allowlist is meant to police.
+    call this allowlist is meant to police. ``exp.Case``/``exp.If``
+    (``CASE WHEN ... END`` parses to a ``Case`` wrapping one ``If`` per
+    branch) and ``exp.Cast`` (``CAST(... AS type)``) are likewise
+    ``Func``-derived here despite being core conditional/type-coercion
+    syntax, not named calls — each confirmed against a live GPT-5 mini
+    response for the same question that used a correct,
+    business-rule-compliant NULL-guard (and, on a separate nondeterministic
+    generation, an explicit integer cast) for average ticket price, and was
+    wrongly rejected before the corresponding exclusion was added. SQLite's
+    own authorizer agrees for all three: it never issues ``SQLITE_FUNCTION``
+    for ``CASE``, ``IF``, or ``CAST``, only for genuine calls. Nested
+    function calls inside any of these are still checked independently by
+    the same tree walk.
     """
-    return isinstance(node, exp.Binary | exp.Exists)
+    return isinstance(node, exp.Binary | exp.Exists | exp.Case | exp.If | exp.Cast)

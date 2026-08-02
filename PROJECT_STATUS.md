@@ -6,9 +6,10 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-The end-to-end NLQ product now works, offline and mocked, on top of the
-committed `6337d0b` checkpoint (the complete static SQL-safety policy plus
-U3 controlled execution). `src/bse_nlq/service.py` orchestrates
+The end-to-end NLQ product works, verified against both a mocked provider
+and the real GPT-5 mini model, on top of the committed `ab1dbc1` checkpoint
+(the complete static SQL-safety policy, U3 controlled execution, and the
+Phase 4/5/6 vertical flow). `src/bse_nlq/service.py` orchestrates
 question -> prompt -> one model generation -> `ModelDecision` validation ->
 SQL validation -> `execute_validated_sql` -> deterministic rendering ->
 `QueryResult`, using the project's frozen terminal-state contract (D-007
@@ -24,27 +25,33 @@ fails closed with a clear message (no network attempt) when
 `OPENAI_API_KEY` is unset. `src/bse_nlq/provider_openai.py` is the one
 production adapter (GPT-5 mini via the OpenAI Responses API, strict
 JSON-Schema structured output); every `openai.APIError` maps to
-`provider_unavailable`. The full vertical flow is verified with a fake
-generator against the real seeded database, real SQL policy, and real
-execution boundary — only the model call is mocked. A live smoke test is
-pending: this sandbox has neither `OPENAI_API_KEY` set nor outbound network
-access, so it could not be attempted here.
+`provider_unavailable`.
+
+**A live smoke test has been performed against the real OpenAI API** (see
+`evaluation/results_live.md`). A live run of the full 13-question evaluation
+set scored 10/13 on the first pass; the SQL policy incorrectly rejected a
+correct, business-rule-compliant `CASE`/`CAST` expression the model used for
+average ticket price (a SQLGlot class-hierarchy quirk — `exp.Case`/`exp.If`/
+`exp.Cast` are `Func`-derived in the pinned version, the same bug class
+already fixed once for `And`/`Or`/`Exists` in Slice 4D). Fixed narrowly in
+`src/bse_nlq/sql_policy/function_policy.py` with regression tests; a full
+rerun scored 10/13, with the remaining 3 non-passes classified as expected
+model behavior (over-cautious clarification, the model refusing a
+prompt-injection attempt outright, and a case only meaningful in reference
+mode), not defects.
 
 A compact 13-question evaluation set (`evaluation/`) covers count, sum,
 average, ranking, join, gross revenue, net revenue, an explicit date range,
 clarification, unsupported, an unsafe-injection-pressure case, an
 empty-result case, and malformed model output. `evaluation/run.py` runs it
 in reference mode (a fake generator returns hand-authored correct SQL,
-evaluating the pipeline downstream of the model) or `--live` mode (real
-model, requires credentials/network). Reference-mode result: 13/13 passed.
-See `evaluation/results.md` for the honest scope of what that does and does
-not establish.
+evaluating the pipeline downstream of the model; 13/13 passed — see
+`evaluation/results.md`) or `--live` mode (real model; 10/13 passed — see
+`evaluation/results_live.md`).
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
 
-No end-to-end application feature path exists yet: a user cannot submit a question through a service/CLI that calls a provider or executes generated SQL. A developer may build a local untracked database file and open it read-only; that is not the product ask path.
-
-**All 14 development anchors have been executed successfully against the real seeded in-memory database.** A13 returns E11 only; A14 returns zero rows. Invariants I-1 through I-8 and the published reconciliations pass against that seed. This does not claim model-generated SQL or application query-execution services have been tested.
+**All 14 development anchors have been executed successfully against the real seeded in-memory database.** A13 returns E11 only; A14 returns zero rows. Invariants I-1 through I-8 and the published reconciliations pass against that seed.
 
 ## Completed work
 
@@ -94,7 +101,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 367 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 959 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 963 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -104,20 +111,15 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-Reviewer-facing README finalization: setup, usage, architecture overview,
-model choice, evaluation summary, limitations, and tradeoffs.
-
-## Subsequent sequence
-
-1. Reviewer-facing README finalization (next).
-2. Live OpenAI smoke test when `OPENAI_API_KEY` and network access are both available (blocked in this sandbox on both counts).
+None outstanding for this take-home. The live smoke test and live
+evaluation are both complete (`evaluation/results_live.md`); remaining
+possible future work is a Groq comparison and a larger/holdout evaluation
+set, both explicitly out of scope for this pass.
 
 ## Active blockers
 
-The live OpenAI smoke test cannot run in this sandbox: `OPENAI_API_KEY` is
-not set and outbound network access is blocked. The mocked end-to-end flow,
-CLI, and test suite are unaffected — none of them require credentials or
-network.
+None. The live OpenAI smoke test and the full live evaluation run both
+completed successfully against the real API.
 
 Model quality and final selection are intentionally blocked on the frozen evaluation, not on missing access or endpoint compatibility.
 
@@ -138,9 +140,9 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Final model selection and the live provider smoke test (blocked in this
-sandbox: no `OPENAI_API_KEY`, no outbound network). The reviewer-facing
-README has not yet been finalized.
+A Groq comparison adapter and a larger/holdout evaluation set, both
+explicitly out of scope for this pass. The live OpenAI smoke test and live
+evaluation are complete, not pending.
 
 Implemented and test-verified: the physical schema DDL, deterministic seed
 loader, persistent builder, read-only runtime factory, semantic metadata
@@ -149,7 +151,8 @@ complete SQL-policy Slices 1–4D, U3 controlled execution
 (`execute_validated_sql` / `RawQueryResult`), the end-to-end `QueryService` /
 `bse-nlq ask` CLI / OpenAI adapter (`src/bse_nlq/service.py`,
 `src/bse_nlq/cli.py`, `src/bse_nlq/provider_openai.py`), and the compact
-reference-mode evaluation set (`evaluation/`, 13/13 passed). All 14
-executable development anchors pass the complete static validator and
-execute correctly end to end. Generated database files remain local and
+evaluation set (`evaluation/`, 13/13 reference mode, 10/13 live against
+GPT-5 mini — see `evaluation/results.md` and `evaluation/results_live.md`).
+All 14 executable development anchors pass the complete static validator
+and execute correctly end to end. Generated database files remain local and
 untracked.

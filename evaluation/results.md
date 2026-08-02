@@ -16,10 +16,12 @@ correct SQL from an English question**, since no model was called.
 
 A live run (`--live`) sends each question to the real OpenAI adapter and
 scores the model's actual answer instead. It requires `OPENAI_API_KEY` and
-network access — both unavailable in the sandbox this run was produced in,
-so a live result could not be recorded here. Latency is only meaningful for
-a live run; the sub-5ms figures below are local SQLite execution time, not
-model response time.
+network access. **A live run has since been recorded — see
+[`evaluation/results_live.md`](results_live.md) (10/13 passed; GPT-5 mini)**,
+kept as a separate document from this reference-mode run rather than mixed
+into it. Latency in the table below is not meaningful — it is local SQLite
+execution time against a mocked model call, not real model response time;
+see the live results document for real latency figures.
 
 ## Result: 13/13 passed (reference mode)
 
@@ -57,6 +59,7 @@ net 6,460,000, tickets_sold 957) where they overlap.
   rejects a destructive statement even if a model were tricked into
   producing one — it does not evaluate whether a real model would actually
   be tricked into producing it.
-- No live model comparison (OpenAI vs. Groq) was performed; that was
-  explicitly out of scope for this pass, and blocked here regardless by
-  missing credentials and network access.
+- No live model comparison (OpenAI vs. Groq) was performed; a second
+  provider adapter was explicitly out of scope for this pass. A live run of
+  the one implemented provider (OpenAI/GPT-5 mini) has been recorded — see
+  `evaluation/results_live.md`.

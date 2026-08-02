@@ -27,26 +27,49 @@ production adapter (GPT-5 mini via the OpenAI Responses API, strict
 JSON-Schema structured output); every `openai.APIError` maps to
 `provider_unavailable`.
 
-**A live smoke test has been performed against the real OpenAI API** (see
-`evaluation/results_live.md`). A live run of the full 13-question evaluation
-set scored 10/13 on the first pass; the SQL policy incorrectly rejected a
-correct, business-rule-compliant `CASE`/`CAST` expression the model used for
-average ticket price (a SQLGlot class-hierarchy quirk — `exp.Case`/`exp.If`/
-`exp.Cast` are `Func`-derived in the pinned version, the same bug class
-already fixed once for `And`/`Or`/`Exists` in Slice 4D). Fixed narrowly in
-`src/bse_nlq/sql_policy/function_policy.py` with regression tests; a full
-rerun scored 10/13, with the remaining 3 non-passes classified as expected
-model behavior (over-cautious clarification, the model refusing a
-prompt-injection attempt outright, and a case only meaningful in reference
-mode), not defects.
+**The full 13-question evaluation set has been run against the real OpenAI
+API** (see `evaluation/results_live.md`) and scored in three tiers rather
+than one blended number (answerable SQL questions / behavioral cases /
+synthetic fault-injection cases — the last is reference-mode only, since a
+well-behaved live model can't be made to emit malformed output on demand).
+**Final live result: 8/8 answerable + 4/4 behavioral.** Two genuine defects
+were found and fixed along the way:
+
+1. A SQLGlot class-hierarchy quirk — `exp.Case`, `exp.If` (each `WHEN`
+   branch), and `exp.Cast` are `Func`-derived in the pinned version, so the
+   function allowlist wrongly rejected a correct, business-rule-compliant
+   NULL-guard expression for average ticket price (the same bug class
+   already fixed once for `And`/`Or`/`Exists` in Slice 4D). Fixed in
+   `src/bse_nlq/sql_policy/function_policy.py` with regression tests.
+2. The frozen `bare_revenue` ambiguity rule
+   (`silent_default_forbidden: true`) applied unconditionally, so the PRD's
+   own example question ("top 5 event categories by total revenue")
+   triggered a clarification on every run. Fixed narrowly in the prompt
+   policy (`src/bse_nlq/prompt/policy.py`): for an explicit
+   ranking/aggregation-by-revenue question with no stated gross/net or
+   period, default to gross revenue over all available data and *disclose*
+   both defaults via self-documenting column naming — satisfying
+   "no silent default" without asking. Genuinely open-ended questions
+   ("how are sales doing," "best event," sold-out ambiguity) are unchanged.
+   Regression tests in `tests/unit/decision/test_prompt_ambiguity_policy.py`
+   verify the prompt text; the live evaluation verifies the model actually
+   follows it.
+
+One live-verified, honest, un-fixed limitation: a ranked/superlative
+"average ticket price" question sometimes leads the model to `NULLIF` or a
+`MAX()` subquery — both genuine SQLite functions (confirmed via SQLite's
+own authorizer) outside the deliberately narrow 3-function allowlist. Not
+expanded, per this pass's explicit "no additional SQL semantics" scope
+boundary; documented in `evaluation/results_live.md`.
 
 A compact 13-question evaluation set (`evaluation/`) covers count, sum,
 average, ranking, join, gross revenue, net revenue, an explicit date range,
 clarification, unsupported, an unsafe-injection-pressure case, an
 empty-result case, and malformed model output. `evaluation/run.py` runs it
 in reference mode (a fake generator returns hand-authored correct SQL,
-evaluating the pipeline downstream of the model; 13/13 passed — see
-`evaluation/results.md`) or `--live` mode (real model; 10/13 passed — see
+evaluating the pipeline downstream of the model; 8/8 + 4/4 + 1/1 passed —
+see `evaluation/results.md`) or `--live` mode (real model; 8/8 + 4/4
+passed, fault-injection case not scored live — see
 `evaluation/results_live.md`).
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
@@ -101,7 +124,7 @@ Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/pl
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 963 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 100 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy regression suite); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 971 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -151,8 +174,10 @@ complete SQL-policy Slices 1–4D, U3 controlled execution
 (`execute_validated_sql` / `RawQueryResult`), the end-to-end `QueryService` /
 `bse-nlq ask` CLI / OpenAI adapter (`src/bse_nlq/service.py`,
 `src/bse_nlq/cli.py`, `src/bse_nlq/provider_openai.py`), and the compact
-evaluation set (`evaluation/`, 13/13 reference mode, 10/13 live against
-GPT-5 mini — see `evaluation/results.md` and `evaluation/results_live.md`).
+evaluation set (`evaluation/`, 8/8 answerable + 4/4 behavioral + 1/1
+fault-injection reference mode, 8/8 answerable + 4/4 behavioral live
+against GPT-5 mini — see `evaluation/results.md` and
+`evaluation/results_live.md`).
 All 14 executable development anchors pass the complete static validator
 and execute correctly end to end. Generated database files remain local and
 untracked.

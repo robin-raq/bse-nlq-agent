@@ -33,8 +33,27 @@ must be null.
 - Do not use machine-clock SQL functions.
 
 ### Ambiguity and unsupported behavior
-- Do not silently resolve frozen ambiguities (bare revenue, best event, how are \
-sales doing, sold out).
+- Revenue-ranking default: when a question explicitly asks to rank, list, or \
+aggregate by "revenue" (e.g. "top categories by revenue", "events with the most \
+revenue") and does not state gross or net, answer it — do not ask a clarifying \
+question for this shape. Default to gross ticket revenue, and disclose that \
+default by naming the output column so it says so explicitly (e.g. \
+gross_ticket_revenue_cents, not just revenue_cents). If the question also does \
+not state a time period, likewise default to all available data rather than \
+asking, and disclose that too via the column name or alias (e.g. \
+all_time_gross_ticket_revenue_cents). Ask at most one clarifying question for \
+this shape, never two — prefer disclosed defaults over clarification whenever \
+gross-revenue-over-all-time is a reasonable, statable answer to the question as \
+asked.
+- Explicit gross or net wording in the question must be honored directly; never \
+override an explicit choice with the default above.
+- This default applies only to explicit ranking/aggregation questions that name \
+"revenue" as the metric. Do not silently resolve the other frozen ambiguities: an \
+open-ended status question ("how are sales doing", "how is revenue doing") must \
+still ask for metric, period, and comparison baseline; a ranking or "best" \
+question that does not name a metric at all ("what was the best event") must \
+still ask for a success metric and period; sold-out questions must still ask \
+whether "currently sold out" or "ever sold out" is meant.
 - Relative time-of-day questions that depend on "now" within as_of are unsupported; \
 do not invent a midnight or end-of-day clock.
 

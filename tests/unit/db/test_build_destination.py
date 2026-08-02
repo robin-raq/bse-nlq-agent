@@ -9,6 +9,8 @@ import pytest
 
 from bse_nlq.db.build import build_database
 from bse_nlq.db.errors import DatabaseBuildError
+from bse_nlq.db.runtime import open_readonly_database
+from bse_nlq.metadata.models import APPLICATION_TABLES
 
 
 def test_rejects_existing_directory(tmp_path: Path) -> None:
@@ -32,14 +34,26 @@ def test_rejects_memory_target(tmp_path: Path) -> None:
         build_database(":memory:")
 
 
-def test_rejects_sqlite_uri_parameters(tmp_path: Path) -> None:
-    with pytest.raises(DatabaseBuildError, match="URI"):
-        build_database(f"{tmp_path / 'app.db'}?mode=rwc")
+def test_builds_and_reopens_literal_question_mark_filename(tmp_path: Path) -> None:
+    destination = tmp_path / "literal?.db"
+
+    result = build_database(destination)
+
+    assert result.destination == destination.resolve()
+    assert destination.is_file()
+    with open_readonly_database(destination) as database:
+        assert database.database_path == destination.resolve()
+        assert database.physical_tables == frozenset(APPLICATION_TABLES)
+        assert database._connection.execute("PRAGMA query_only").fetchone() == (1,)
+        assert database._connection.execute(
+            "SELECT COUNT(*) FROM venues"
+        ).fetchone() == (4,)
 
 
-def test_rejects_file_uri(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", ("", "?mode=rwc"))
+def test_rejects_file_uri(tmp_path: Path, suffix: str) -> None:
     with pytest.raises(DatabaseBuildError, match="filesystem"):
-        build_database(f"file:{tmp_path / 'app.db'}")
+        build_database(f"file:{tmp_path / 'app.db'}{suffix}")
 
 
 def test_default_refusal_leaves_existing_bytes(tmp_path: Path) -> None:
@@ -67,6 +81,26 @@ def test_successful_atomic_overwrite(tmp_path: Path) -> None:
         assert not Path(f"{destination}{suffix}").exists()
     leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".")]
     assert leftovers == []
+
+
+def test_literal_question_mark_overwrite_removes_exact_sidecars(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "what?ever.sqlite"
+    first = build_database(destination)
+    sidecars = tuple(
+        Path(f"{destination}{suffix}") for suffix in ("-wal", "-shm", "-journal")
+    )
+    for sidecar in sidecars:
+        sidecar.write_bytes(b"stale")
+    unrelated = Path(f"{destination}-wal.backup")
+    unrelated.write_bytes(b"keep")
+
+    second = build_database(destination, overwrite=True)
+
+    assert second.logical_content_fingerprint == first.logical_content_fingerprint
+    assert not any(sidecar.exists() for sidecar in sidecars)
+    assert unrelated.read_bytes() == b"keep"
 
 
 def test_failed_overwrite_preserves_destination(tmp_path: Path, monkeypatch) -> None:

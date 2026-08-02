@@ -176,9 +176,6 @@ def _validate_destination(destination: Path | str, *, overwrite: bool) -> Path:
         raise DatabaseBuildError(
             "destination must be a filesystem path, not a SQLite URI"
         )
-    if "?" in raw:
-        raise DatabaseBuildError("destination must not include SQLite URI parameters")
-
     path = Path(raw).expanduser()
     if path.name in {"", ".", ".."} or path.name == ":memory:":
         raise DatabaseBuildError("destination must include a valid database filename")

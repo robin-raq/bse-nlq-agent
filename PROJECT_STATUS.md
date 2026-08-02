@@ -6,18 +6,19 @@ This is the operational handoff for coding agents. Read it before starting work 
 
 ## Current phase
 
-U2 Slice 4C (unqualified column binding and ORDER BY projection aliases) is
-implemented and test-first verified offline on top of the committed `0dc7ffa`
-checkpoint (Slice 4B). `validate_sql` now also binds unqualified references
-against the column's own local scope only (ambiguity-first, no outer
-climbing), and resolves an unqualified ORDER BY name against the immediate
-SELECT's own projection alias before falling back to local-column lookup. All
-14 executable development anchors pass the complete static SQL policy. Column
-authorization is otherwise complete: qualified/unqualified binding, exclusions,
-qualified correlation, and star policy are all in place. Functions and dates
-remain deferred to the next slice. No authorizer, progress/result limits,
-controlled executor, QueryService, provider adapter, live model request for
-SQL quality, or product CLI is implemented.
+U2 Slice 4D (function allowlist and machine-clock rejection) is implemented
+and test-first verified offline on top of the committed `3dc1b45` checkpoint
+(Slice 4C). `validate_sql` now authorizes every function call in the tree
+against a fixed allowlist (`SUM`, `COUNT`, `COALESCE`) and rejects everything
+else — including `CURRENT_DATE`/`CURRENT_TIME`/`CURRENT_TIMESTAMP` and every
+`date`/`datetime`/`julianday`/`strftime`/`unixepoch(...)` form — by the same
+default-deny path, so no separate date-argument parsing was needed. Allowed
+names populate `referenced_functions`. **The complete SQL-safety static
+policy (Slices 1-4D) is now implemented**; column authorization, star policy,
+and function/date policy are all in place. All 14 executable development
+anchors pass. No SQLite authorizer, progress/result limits, controlled
+executor, QueryService, provider adapter, live model request for SQL quality,
+or product CLI is implemented.
 
 Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/planning/seed-manifest.md` (exact deterministic literals), `docs/diagrams/schema-erd.md` (ERD), `src/bse_nlq/metadata/schema.json` (semantic sidecar).
 
@@ -54,6 +55,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 - U2 Slice 4B qualified-column policy was implemented test-first in `src/bse_nlq/sql_policy/column_policy.py`. It resolves source qualifiers by ASCII fold through the nearest permitted lexical scope, stops at the first matching qualifier, treats aliases as replacing physical table qualifiers, blocks outer fallback after a near match, validates internal outputs without inventing physical pairs, rejects unknown qualifiers/columns and excluded physical columns with distinct reasons, records canonical physical `referenced_columns`, rejects authored stars except `COUNT(*)`, and preserves SQLGlot's synthetic `VALUES` wrapper. CTE/derived bodies do not gain lateral lookup.
 - Untrusted parser work is bounded before and after SQLGlot parsing at 16,384 input characters and 512 AST nodes. SQLGlot `RecursionError` is narrowly normalized to `InvalidSqlError` with cause preservation; unrelated programming errors propagate.
 - U2 Slice 4C unqualified-column policy was implemented test-first in `src/bse_nlq/sql_policy/column_policy.py` (`authorize_columns`, formerly `authorize_qualified_columns`). An unqualified reference binds only against sources local to its own scope (`scope.sources`): more than one local candidate is `ambiguous_column`; exactly one binds through the same physical/internal authorization as the qualified path (so exclusion and unknown-column reasons stay consistent); zero local candidates is `unknown_column` and never climbs to an outer scope. An unqualified name inside ORDER BY that matches the immediately enclosing SELECT's own projection alias resolves to that alias (SQLite's own precedence) without contributing a physical identity; WHERE, JOIN ON, GROUP BY, and HAVING do not see alias binding. All 14 executable development anchors (`tests/unit/sql_policy/test_anchor_compatibility.py`) pass the complete static validator using the real packaged schema/metadata inventory.
+- U2 Slice 4D function/machine-clock policy was implemented test-first in `src/bse_nlq/sql_policy/function_policy.py`. Authorization is type-based, not name-based: only `exp.Sum`/`exp.Count`/`exp.Coalesce` are permitted; every other `exp.Func` node is rejected as `forbidden_function`, which covers every machine-clock form (`CURRENT_DATE`/`CURRENT_TIME`/`CURRENT_TIMESTAMP` and `date`/`datetime`/`julianday`/`strftime`/`unixepoch(...)`) without inspecting `'now'`/`'localtime'`/`'utc'` arguments. `exp.Binary` (this SQLGlot version multiply-inherits `And`/`Or` from both `Binary` and `Func`) and `exp.Exists` (the Slice 4B correlated-subquery predicate) are excluded from the walk as non-function syntax; nested function calls inside them are still checked independently. Allowed names populate `referenced_functions`. All 14 anchors pass.
 - A follow-up hardening pass closed an independent audit of the runtime factory. All path preconditions (including `~` expansion and filesystem inspection) now evaluate inside the factory's exception boundary, so `RuntimeError` from unresolvable `~user` and `ValueError` from embedded NUL surface as `DatabaseRuntimeError` with `__cause__` preserved; `KeyboardInterrupt` / `SystemExit` still propagate unwrapped after cleanup. `close()` no longer swallows an underlying close failure — it raises `DatabaseRuntimeError` and leaves the wrapper open so a failed close is never reported as success. Three unreachable post-reconciliation checks (already guaranteed by `reconcile_metadata` and by constructing the visible/excluded inventories from the same metadata columns) were removed. `database_path` is documented and tested as immutable identity that remains readable after close.
 - A focused exception-boundary review follow-up narrowed ordinary open normalization from bare `except Exception` to `OSError | RuntimeError | ValueError | TypeError | sqlite3.Error` (with `MetadataError` still dedicated), so programming defects propagate after cleanup; removed the unreachable `os.fspath` guard; documented context-manager double-failure chaining and failed-open cleanup asymmetry.
 - An independent post-baseline audit found that the narrowed tuple above was still scoped by exception *type* across the whole open sequence rather than by the specific *operation* that can legitimately raise it, so a `RuntimeError`/`TypeError`/`ValueError` from a bug inside a metadata/inventory helper or the PRAGMA setup helper was silently normalized as an ordinary `DatabaseRuntimeError`, contradicting the documented contract. Normalization is now localized: `sqlite3.connect` and post-connect SQLite setup (`_disable_load_extension`, `_enable_and_verify_pragma`) each normalize only `sqlite3.Error` at their own call sites; the metadata step normalizes only `MetadataError` and `sqlite3.Error`; path preconditions remain self-contained inside `_validate_database_path` as before. Programming defects from those same helpers now propagate unwrapped after cleanup. Three pre-existing tests that had injected a bare `RuntimeError` as a stand-in "primary failure" through `_enable_and_verify_pragma`/`_disable_load_extension`/`load_semantic_metadata` and asserted it should normalize were corrected to inject a genuine `sqlite3.Error` instead, since a bare `RuntimeError` from those call sites is a programming defect under the corrected contract, not an expected failure mode.
@@ -72,7 +74,7 @@ No end-to-end application feature path exists yet: a user cannot submit a questi
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 342 SQL-policy under `tests/unit/sql_policy/` (Slices 1–4C; 26 focused qualified-column/star cases, 25 unqualified-column/ORDER-BY-alias cases, 14 anchor-compatibility cases); 385 under `tests/unit/db` (includes persistent-build and runtime coverage; 92 runtime); 891 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 92 under `tests/unit/decision/`; 69 metadata; 367 SQL-policy under `tests/unit/sql_policy/` (Slices 1–4D; 26 focused qualified-column/star cases, 25 unqualified-column/ORDER-BY-alias cases, 14 anchor-compatibility cases, 25 function/machine-clock cases); 385 under `tests/unit/db` (includes persistent-build and runtime coverage; 92 runtime); 916 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -82,10 +84,9 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-U2 Slice 4D: minimal SQL function allowlist and deterministic date policy,
-sized to what the 14 anchors and PRD example questions actually use. Reject
-machine-clock dependence (`now`, `current_date`/`current_time`/
-`current_timestamp`, `localtime`, `utc`, zero-argument clock functions).
+U3: the default-deny SQLite authorizer and controlled execution boundary —
+the security-critical phase that turns `ValidatedSql` into an executed,
+row/column-capped result under a progress-handler opcode budget.
 
 ## Subsequent sequence
 
@@ -119,22 +120,22 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-Function and date authorization (Slice 4D), SQLite authorizer, progress and
-result limits, controlled query execution, provider adapters, QueryService,
-result formatting, product CLI, integration and safety suites beyond the
-runtime open boundary and Slice 1–4C SQL-policy foundation, evaluation cases,
-evaluation results, and final model selection.
+SQLite authorizer, progress and result limits, controlled query execution,
+provider adapters, QueryService, result formatting, product CLI, integration
+and safety suites beyond the runtime open boundary and the now-complete
+Slice 1–4D SQL-policy foundation, evaluation cases, evaluation results, and
+final model selection.
 
 The physical schema DDL (`apply_schema`), deterministic seed loader
 (`load_seed_data`), persistent builder (`build_database`), read-only runtime
 factory (`open_readonly_database`), semantic metadata sidecar
 (`load_semantic_metadata`), ModelDecision validation
 (`parse_model_decision_json`), deterministic prompt builder
-(`build_prompt`), and SQL-policy Slices 1–4C (`validate_sql` / `ValidatedSql`
-with bounded parsing, structure/table policy, canonical column inventories,
-internal output schemas, qualified/unqualified column binding and
-correlation, ORDER BY projection aliases, exclusions, canonical physical
-references, and star policy) are implemented and test-verified. All 14
-executable development anchors pass the complete static validator. Generated
-database files remain local and untracked. No provider adapter or model-SQL
-execution path exists.
+(`build_prompt`), and the complete SQL-policy Slices 1–4D (`validate_sql` /
+`ValidatedSql` with bounded parsing, structure/table policy, canonical column
+inventories, internal output schemas, qualified/unqualified column binding
+and correlation, ORDER BY projection aliases, exclusions, canonical physical
+references, star policy, and a fixed function/machine-clock allowlist) are
+implemented and test-verified. All 14 executable development anchors pass the
+complete static validator. Generated database files remain local and
+untracked. No provider adapter or model-SQL execution path exists.

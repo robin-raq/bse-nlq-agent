@@ -14,9 +14,13 @@ class SqlRejectionReason(StrEnum):
     ``unknown_table``, ``qualified_table``, and ``unsupported_table_source``.
     Slice 4A adds ``ambiguous_column`` (duplicate internal outputs),
     ``invalid_cte_column_list`` (explicit CTE list arity mismatch), and
-    ``invalid_union_arity`` (Union branch arity mismatch). Slice 4B adds
-    qualified-column, exclusion, unsupported-column, and projection-star
-    reasons. This is not a terminal-state enum.
+    ``invalid_union_arity`` (Union branch arity mismatch). Slice 4B/4C add
+    qualified/unqualified-column, exclusion, unsupported-column, and
+    projection-star reasons. Slice 4D adds ``forbidden_function`` for any
+    function outside the fixed allowlist, including every machine-clock form
+    (``CURRENT_DATE``/``CURRENT_TIME``/``CURRENT_TIMESTAMP``, ``date('now')``,
+    ``datetime(...)``, ``julianday(...)``, ``strftime(...)``, ``unixepoch()``).
+    This is not a terminal-state enum.
     """
 
     EMPTY_SQL = "empty_sql"
@@ -37,6 +41,7 @@ class SqlRejectionReason(StrEnum):
     UNKNOWN_COLUMN = "unknown_column"
     EXCLUDED_COLUMN = "excluded_column"
     UNSUPPORTED_COLUMN_REFERENCE = "unsupported_column_reference"
+    FORBIDDEN_FUNCTION = "forbidden_function"
 
 
 class SqlPolicyError(Exception):

@@ -57,12 +57,13 @@ Implemented module paths for this phase:
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
 - `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
-- `bse_nlq.sql_policy` — Slices 1–4C: `validate_sql` / `ValidatedSql` with
-  bounded parsing, structure policy, physical-table authorization, canonical
-  column inventories, internal CTE/derived/Union output-name schemas,
-  qualified/unqualified column binding and correlation, ORDER BY projection
-  aliases, exclusions, canonical physical `referenced_columns`, and
-  `COUNT(*)`-only star policy
+- `bse_nlq.sql_policy` — Slices 1–4D (complete): `validate_sql` / `ValidatedSql`
+  with bounded parsing, structure policy, physical-table authorization,
+  canonical column inventories, internal CTE/derived/Union output-name
+  schemas, qualified/unqualified column binding and correlation, ORDER BY
+  projection aliases, exclusions, canonical physical `referenced_columns`,
+  `COUNT(*)`-only star policy, and a fixed function allowlist (`SUM`,
+  `COUNT`, `COALESCE`) that rejects every machine-clock form by default-deny
 
 ## Model contract
 
@@ -128,11 +129,12 @@ after close.
 Remaining independent controls are still pending and must each be tested before
 model-generated SQL is executed:
 
-1. Schema-aware SQLGlot AST authorization for functions and dates on top of
-   Slices 1–4C in `bse_nlq.sql_policy` (columns and stars are complete).
-2. Default-deny SQLite authorizer.
-3. Progress-handler instruction budget.
-4. Result-row / column caps and controlled execution.
+1. Default-deny SQLite authorizer.
+2. Progress-handler instruction budget.
+3. Result-row / column caps and controlled execution.
+
+(Schema-aware SQLGlot AST authorization — tables, columns, stars, functions,
+and machine-clock rejection — is complete as of Slice 4D.)
 
 The SQL-policy package (`validate_sql` → immutable `ValidatedSql`) parses with
 SQLGlot's SQLite dialect, rejects empty/semicolon-only and multi-statement
@@ -164,11 +166,21 @@ authorization as the qualified path; zero local candidates is
 name that matches the immediately enclosing SELECT's own projection alias
 resolves to that alias — matching SQLite's own precedence — without
 contributing a physical identity; WHERE, JOIN ON, GROUP BY, and HAVING do not
-see alias binding. It does **not** yet authorize functions or dates. Static
-policy uses the parsed SQLite AST, never regex or semicolon heuristics as the
-primary authority. Rejected SQL will expose `generated_sql` but leave
-`executed_sql` null. The complete SQL-safety foundation is not yet
-implemented.
+see alias binding. Slice 4D authorizes every function call by SQLGlot
+expression *type* against a fixed allowlist (`exp.Sum`, `exp.Count`,
+`exp.Coalesce`); every other call is rejected, which covers every
+machine-clock form (`CURRENT_DATE`/`CURRENT_TIME`/`CURRENT_TIMESTAMP`,
+`date`/`datetime`/`julianday`/`strftime`/`unixepoch(...)`) without inspecting
+`'now'`/`'localtime'`/`'utc'` arguments — no date-expression grammar was
+built. `exp.Binary` (this SQLGlot version multiply-inherits `And`/`Or` from
+both `Binary` and `Func`) and `exp.Exists` (the Slice 4B correlated-subquery
+predicate) are excluded from the function walk as non-function syntax; nested
+calls inside them are still checked independently. Allowed names populate
+`referenced_functions`. Static policy uses the parsed SQLite AST, never regex
+or semicolon heuristics as the primary authority. Rejected SQL will expose
+`generated_sql` but leave `executed_sql` null. **The static SQL-safety
+foundation (Slices 1–4D) is now complete**; the authorizer and controlled
+execution boundary remain.
 
 Physical-source classification uses only `scope.sources`: `exp.Table` is a
 physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw

@@ -125,9 +125,9 @@ def test_reachable_forbidden_nodes_inside_ctes_are_rejected(
     [
         "SELECT 1 AS value",
         "SELECT e.event_id FROM events AS e",
-        "SELECT REPLACE('abc', 'a', 'x') AS replaced",
+        "SELECT COALESCE(1, 2) AS replaced",
     ],
-    ids=("projection-alias", "table-alias", "replace-function-alias"),
+    ids=("projection-alias", "table-alias", "coalesce-function-alias"),
 )
 def test_valid_aliases_remain_accepted(sql: str) -> None:
     result = validate_sql(

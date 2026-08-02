@@ -17,8 +17,17 @@ and arity detection.
 
 Slice 4B: qualified physical/internal column binding, qualified lexical
 correlation, prompt-exclusion enforcement, canonical ``referenced_columns``,
-and ``COUNT(*)``-only star policy. Unqualified binding, functions, and dates
-remain later slices. This package does not open SQLite or execute SQL.
+and ``COUNT(*)``-only star policy.
+
+Slice 4C: unqualified column binding local to each scope (ambiguity-first, no
+outer climbing) and ORDER BY projection-alias resolution.
+
+Slice 4D: a fixed function allowlist (``SUM``, ``COUNT``, ``COALESCE``)
+default-denies every other call, including every machine-clock form
+(``CURRENT_DATE``/``CURRENT_TIME``/``CURRENT_TIMESTAMP``,
+``date``/``datetime``/``julianday``/``strftime``/``unixepoch``); allowed names
+populate ``referenced_functions``. This package does not open SQLite or
+execute SQL.
 """
 
 from __future__ import annotations

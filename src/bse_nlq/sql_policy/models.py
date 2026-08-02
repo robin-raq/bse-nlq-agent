@@ -15,8 +15,8 @@ class ValidatedSql:
     fingerprinting and comparison. ``referenced_tables`` holds canonical
     physical table names after Slice 3 authorization. ``referenced_columns``
     holds canonical physical pairs bound by the implemented column slices;
-    internal outputs are not reported as physical pairs. Function references
-    remain empty until a later slice.
+    internal outputs are not reported as physical pairs. ``referenced_functions``
+    holds canonical names of allowlisted functions actually present.
     """
 
     original_sql: str

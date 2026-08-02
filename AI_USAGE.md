@@ -28,7 +28,8 @@ AI assisted with:
 - test-first implementation of U2 Slice 3 physical-table authorization via SQLGlot `scope.sources` / `traverse_scope`, including CTE-shadowing probes, qualifier/TVF probes, SQLite casing probes, red/green TDD, twenty mutation checks, and installed-wheel validation without SQLite execution; and
 - test-first implementation of U2 Slice 4A canonical column inventories and internal CTE/derived/Union output-name schemas (single-writer lead plus read-only SQLGlot research, adversarial, and closure-audit agents), including SQLGlot/SQLite probes, red/green TDD, mutation checks, and installed-wheel validation without SQLite execution.
 - test-first implementation of U2 Slice 4B qualified physical/internal column binding, lexical qualified correlation, exclusions, canonical physical `referenced_columns`, and `COUNT(*)`-only star policy, including red/green boundary tests and preservation of the pinned SQLGlot `VALUES` rewrite; and
-- test-first implementation of U2 Slice 4C unqualified column binding (local-scope, ambiguity-first, no outer climbing) and ORDER BY projection-alias resolution, including updating prior Slice 4A/4B tests whose assertions encoded the now-superseded deferred behavior, and an anchor-compatibility suite proving all 14 executable development anchors pass the complete static validator against the real packaged schema/metadata.
+- test-first implementation of U2 Slice 4C unqualified column binding (local-scope, ambiguity-first, no outer climbing) and ORDER BY projection-alias resolution, including updating prior Slice 4A/4B tests whose assertions encoded the now-superseded deferred behavior, and an anchor-compatibility suite proving all 14 executable development anchors pass the complete static validator against the real packaged schema/metadata; and
+- test-first implementation of U2 Slice 4D, a type-based SQL function allowlist (`SUM`/`COUNT`/`COALESCE`) that default-denies every machine-clock form, including diagnosing and excluding a SQLGlot-version-specific `And`/`Or`/`Exists` multiple-inheritance quirk that would otherwise have misclassified ordinary boolean connectives and the Slice 4B correlated-subquery predicate as forbidden function calls. This completes the static SQL-safety foundation (Slices 1–4D).
 
 Claude Code also helped prepare the current Python package scaffolding, dependency configuration, and initial validation checks.
 
@@ -730,10 +731,28 @@ schema/metadata inventory. The focused suite is 25 tests (plus 14
 anchor-compatibility cases); SQL-policy is 342 and the full offline suite is
 891.
 
+### U2 Slice 4D — function allowlist and machine-clock rejection
+
+Implemented a type-based (not name-based) function allowlist on the committed
+Slice 4C checkpoint: only `exp.Sum`/`exp.Count`/`exp.Coalesce` are permitted,
+every other `exp.Func` node is rejected. This uniformly rejects every
+machine-clock form without a separate date-argument parser. Implementation
+surfaced a real SQLGlot-version quirk mid-pass — `exp.And`/`exp.Or` also
+inherit from `exp.Func` in the pinned 30.14.0 release, so a naive walk flagged
+ordinary `AND`/`OR` connectives as forbidden function calls, and `exp.Exists`
+(load-bearing for the already-committed Slice 4B correlated-subquery tests)
+was likewise caught; both are now explicitly excluded from the walk as
+non-function syntax, with a comment recording why. One test that used
+`REPLACE(...)` purely to prove alias-over-function-expression parsing was
+updated to use an allowlisted function instead. The focused suite is 25
+tests; SQL-policy is 367 and the full offline suite is 916. This completes
+the static SQL-safety foundation (Slices 1–4D); the SQLite authorizer and
+controlled execution boundary are next.
+
 ## Candidate ownership and review
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and SQL-policy Slices 1–4C are implemented and test-verified. Qualified/unqualified physical/internal binding, qualified correlation, ORDER BY aliases, exclusions, canonical physical references, and star policy are present; function/date authorization, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Generated database files remain untracked local artifacts. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, and the complete SQL-policy Slices 1–4D are implemented and test-verified. Qualified/unqualified physical/internal binding, qualified correlation, ORDER BY aliases, exclusions, canonical physical references, star policy, and function/machine-clock authorization are all present; the SQLite authorizer, controlled execution, query service, product CLI, provider integration for SQL quality, and model-quality evaluation are not complete yet. Generated database files remain untracked local artifacts. Provider smoke tests only verified endpoint access and structured-response compatibility; they do not establish SQL quality or model superiority.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

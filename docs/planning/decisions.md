@@ -96,6 +96,32 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
   for this take-home; qualified correlation (Slice 4B) is sufficient for the
   planned product.
 
+#### Locked U2 Slice 4D function/machine-clock rules
+
+- Authorization is by SQLGlot expression *type*, not by parsed function-name
+  string: only `exp.Sum`, `exp.Count`, and `exp.Coalesce` are permitted.
+  Every other `exp.Func` node is `forbidden_function`. This is a fixed
+  allowlist sized to the 14 anchors (`SUM`, `COALESCE`) plus `COUNT` (already
+  assumed legitimate by the Slice 4B `COUNT(*)`-only star policy) — not a
+  general SQL function surface.
+- `AVG` is deliberately excluded even though a PRD example question uses the
+  word "average": the frozen `average_ticket_price` metric forbids naive
+  `AVG(unit_price_cents)` in favor of the quantity-weighted `SUM(...) /
+  SUM(...)` form the anchors already use, so no correctly-implemented query
+  needs it.
+- Every machine-clock form is rejected by the same default-deny path, not by
+  inspecting arguments: `CURRENT_DATE`/`CURRENT_TIME`/`CURRENT_TIMESTAMP` and
+  every `date`/`datetime`/`julianday`/`strftime`/`unixepoch(...)` call are
+  simply not in the allowlist. No date-expression grammar or `'now'` /
+  `'localtime'` / `'utc'` argument parser was built.
+- `exp.Binary` and `exp.Exists` are excluded from the function walk as
+  non-function syntax, not as allowlisted functions: in the pinned SQLGlot
+  30.14.0 release, `exp.And`/`exp.Or` multiply-inherit from both `exp.Binary`
+  and `exp.Func`, and `exp.Exists` (the Slice 4B correlated-subquery
+  predicate) is also `exp.Func`-derived. Nested function calls inside either
+  are still checked independently — only the connective/predicate node itself
+  is exempt.
+
 ### Schema and dataset
 
 Full contract in [`schema-design.md`](schema-design.md).

@@ -22,6 +22,7 @@ from bse_nlq.sql_policy.errors import (
     SqlRejectedError,
     SqlRejectionReason,
 )
+from bse_nlq.sql_policy.function_policy import authorize_functions
 from bse_nlq.sql_policy.models import ValidatedSql
 from bse_nlq.sql_policy.output_schemas import validate_internal_output_schemas
 from bse_nlq.sql_policy.scope_policy import authorize_physical_tables
@@ -61,8 +62,11 @@ def validate_sql(
     lexical qualified correlation and local-scope unqualified resolution are
     applied, ORDER BY projection aliases resolve against the immediate SELECT,
     exclusions are enforced, and physical identities populate
-    ``referenced_columns``. Functions and dates remain deferred. Does not open
-    SQLite or execute SQL.
+    ``referenced_columns``. Every function call is checked against a fixed
+    allowlist (Slice 4D): allowed names populate ``referenced_functions``, and
+    every disallowed call — including every machine-clock form — is rejected.
+    Dates otherwise remain evaluated only as explicit literals; no date-
+    expression grammar is implemented. Does not open SQLite or execute SQL.
     """
     if not isinstance(sql, str):
         raise TypeError("sql must be str")
@@ -121,6 +125,7 @@ def validate_sql(
         expression,
         inventory=inventories.column_inventory,
     )
+    referenced_functions = authorize_functions(expression)
     normalized_sql = _normalize(expression)
     fingerprint = hashlib.sha256(normalized_sql.encode("utf-8")).hexdigest()
     return ValidatedSql(
@@ -129,7 +134,7 @@ def validate_sql(
         fingerprint=fingerprint,
         referenced_tables=referenced_tables,
         referenced_columns=referenced_columns,
-        referenced_functions=frozenset(),
+        referenced_functions=referenced_functions,
     )
 
 

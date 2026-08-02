@@ -68,7 +68,15 @@ def test_build_database_works_from_installed_wheel(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "wheels"
     wheel_dir.mkdir()
     build = subprocess.run(
-        ["uv", "build", "--wheel", "-o", str(wheel_dir)],
+        [
+            "uv",
+            "build",
+            "--wheel",
+            "--offline",
+            "--no-build-isolation",
+            "-o",
+            str(wheel_dir),
+        ],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,

@@ -173,6 +173,9 @@ reduced median API latency from 8,474 ms to 1,871 ms, but scored 16/17 completed
 answerable attempts and 7/8 stable cases after one unchanged-policy rejection.
 Behavior remained 4/4. See the [paced report](evaluation/model_comparison/results/comparison-2026-08-02-groq-paced.md)
 and preserved [original report](evaluation/model_comparison/results/comparison-2026-08-02.md).
+Those reports remain frozen on prompt policy version 1. Prompt policy version 2
+now exposes the existing function allowlist and exact integer weighted average
+formula to both providers, but has not yet received a new live comparison.
 No provider failover, fallback model, or model voting was added.
 
 ## Safety
@@ -305,7 +308,7 @@ uv run mypy src
 
 The offline suite covers deterministic data, strict model decisions, SQL
 authorization, controlled execution, rendering, terminal-state mapping, and
-CLI behavior. The final verified run passed 989 tests without network access
+CLI behavior. The final verified run passed 993 tests without network access
 or API credentials.
 
 ## Limitations

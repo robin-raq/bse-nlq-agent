@@ -31,6 +31,14 @@ must be null.
 - Preserve integer cents and count units; do not invent floats for money.
 - Treat as_of as a date with no time of day.
 - Do not use machine-clock SQL functions.
+- Use only SUM, COUNT, and COALESCE as named SQL functions.
+- Do not use AVG, ROUND, or NULLIF. CASE and CAST are SQL syntax, not named \
+functions, and may be used when needed.
+- For quantity weighted average ticket price in integer cents, use exact \
+nonnegative integer round half up arithmetic: \
+CASE WHEN SUM(quantity) = 0 THEN NULL ELSE \
+(2 * SUM(line_gross_cents) + SUM(quantity)) / (2 * SUM(quantity)) END. \
+Do not use floating point literals for this calculation.
 
 ### Ambiguity and unsupported behavior
 - Revenue-ranking default: when a question explicitly asks to rank, list, or \

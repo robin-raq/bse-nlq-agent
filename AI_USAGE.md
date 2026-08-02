@@ -44,6 +44,16 @@ Markdown, prior-result, and `--daily-tokens-available-at-start 200000`
 arguments. Validation reran the focused comparison tests and full offline suite,
 then Ruff, mypy, lock, diff, artifact-integrity, pacing, and secret checks.
 
+A follow up offline change addressed the one paced stability failure without
+weakening SQL policy. Codex identified that the validator allowed only `SUM`,
+`COUNT`, and `COALESCE`, while prompt policy version 1 did not expose that
+inventory. Prompt policy version 2 now names the allowlist and supplies the
+existing exact integer weighted average formula, with regression tests for the
+contract and a deliberate policy version bump. No provider call was made. The
+new prompt hash is `214bbf9f0260a5a33da06251c0dd0cbde2435d8d1f86d411363d7a35b90bc1e7`;
+the version 1 comparison artifacts were not altered and cannot serve as the
+OpenAI baseline for a future version 2 comparison.
+
 ## Tools
 
 - Claude Code (Claude Opus), including the Compound Engineering plugin

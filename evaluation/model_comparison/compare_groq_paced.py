@@ -49,7 +49,7 @@ PACING_SECONDS = 65.0
 MINIMUM_STARTING_TOKENS = 150_000
 DAILY_TOKEN_LIMIT = 200_000
 TOKEN_RESERVE = 20_000
-MINIMUM_PROJECTED_CALL_TOKENS = 6_000
+MAXIMUM_QUOTA_COMPLIANT_CALL_TOKENS = 8_000
 MAXIMUM_EVALUATION_TOKENS = 150_000
 MAXIMUM_LIVE_CALLS = 24
 EXPECTED_HASHES = {
@@ -120,7 +120,10 @@ class TokenBudget:
 
     @property
     def projected_next_tokens(self) -> int:
-        return max(self._recent_observed_total or 0, MINIMUM_PROJECTED_CALL_TOKENS)
+        return max(
+            self._recent_observed_total or 0,
+            MAXIMUM_QUOTA_COMPLIANT_CALL_TOKENS,
+        )
 
     def can_start_next(self) -> bool:
         evaluation_ceiling = min(
@@ -134,6 +137,10 @@ class TokenBudget:
     ) -> tuple[int, bool]:
         if input_tokens is not None and output_tokens is not None:
             total = input_tokens + output_tokens
+            if total > MAXIMUM_QUOTA_COMPLIANT_CALL_TOKENS:
+                raise RuntimeError(
+                    "reported usage exceeded the quota compliant call bound"
+                )
             self.actual_tokens += total
             self._recent_observed_total = total
             return total, False

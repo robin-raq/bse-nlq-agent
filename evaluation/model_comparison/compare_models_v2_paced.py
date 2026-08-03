@@ -314,8 +314,13 @@ def _provider_metrics(
 ) -> dict[str, Any]:
     items = [item for item in attempts if item["provider"] == provider]
     answerable = [item for item in items if item["category"] == "answerable_sql"]
+    base_answerable = [item for item in answerable if int(item["attempt"]) <= 2]
+    targeted_answerable = [item for item in answerable if int(item["attempt"]) > 2]
     behavior = [item for item in items if item["category"] == "behavior"]
-    completed = [item for item in answerable if item["structured_output_valid"]]
+    completed = [item for item in base_answerable if item["structured_output_valid"]]
+    targeted_completed = [
+        item for item in targeted_answerable if item["structured_output_valid"]
+    ]
     generated = [item for item in completed if item["generated_sql"] is not None]
     stable_details: dict[str, str] = {}
     for case_id in sorted({str(item["case_id"]) for item in answerable}):
@@ -351,6 +356,10 @@ def _provider_metrics(
             _attempt_succeeded(item) for item in completed
         ),
         "completed_answerable_total": len(completed),
+        "targeted_answerable_correct": sum(
+            _attempt_succeeded(item) for item in targeted_completed
+        ),
+        "targeted_answerable_total": len(targeted_completed),
         "stable_answerable_passes": sum(
             value.startswith("passed_both") for value in stable_details.values()
         ),
@@ -408,7 +417,11 @@ def _provider_metrics(
 
 
 def _paired_latency(attempts: list[dict[str, Any]]) -> dict[str, Any]:
-    answerable = [item for item in attempts if item["category"] == "answerable_sql"]
+    answerable = [
+        item
+        for item in attempts
+        if item["category"] == "answerable_sql" and int(item["attempt"]) <= 2
+    ]
     keys = sorted({(str(item["case_id"]), int(item["attempt"])) for item in answerable})
     pairs = []
     for key in keys:
@@ -442,6 +455,8 @@ def _recommendation(metrics: dict[str, Any], paired: dict[str, Any]) -> dict[str
     groq = metrics["groq"]
     openai_median = paired["openai"]["median_ms"]
     groq_median = paired["groq"]["median_ms"]
+    openai_p95 = paired["openai"]["p95_ms"]
+    groq_p95 = paired["groq"]["p95_ms"]
     reduction = (
         round((openai_median - groq_median) / openai_median * 100, 1)
         if openai_median and groq_median is not None
@@ -465,7 +480,13 @@ def _recommendation(metrics: dict[str, Any], paired: dict[str, Any]) -> dict[str
     reliability_ok = _rate(
         groq["end_to_end_successes"], groq["scheduled_calls"]
     ) >= _rate(openai["end_to_end_successes"], openai["scheduled_calls"])
-    latency_ok = reduction is not None and reduction >= 50
+    latency_ok = (
+        reduction is not None
+        and reduction >= 50
+        and openai_p95 is not None
+        and groq_p95 is not None
+        and groq_p95 < openai_p95
+    )
     if quality_ok and reliability_ok and latency_ok:
         decision = "recommend_groq_for_review"
         reason = (
@@ -532,6 +553,7 @@ def _payload(
             "maximum_groq_live_calls": MAXIMUM_LIVE_CALLS,
             "maximum_groq_evaluation_tokens": MAXIMUM_EVALUATION_TOKENS,
             "groq_daily_token_reserve": TOKEN_RESERVE,
+            "stable_answerable_definition": "passed both fixed base attempts",
         },
         "warmups": warmups,
         "attempts": attempts,
@@ -610,7 +632,11 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
             "completed_answerable_correct",
             "completed_answerable_total",
         ),
-        ("stable answerable", "stable_answerable_passes", "stable_answerable_total"),
+        (
+            "two pass answerable consistency",
+            "stable_answerable_passes",
+            "stable_answerable_total",
+        ),
         ("behavior", "behavior_passes", "behavior_total"),
         ("end to end", "end_to_end_successes", "scheduled_calls"),
     ):
@@ -626,6 +652,11 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
             f"| SQL policy accepted | "
             f"{metrics['openai']['sql_policy_acceptance_rate']:.1%} | "
             f"{metrics['groq']['sql_policy_acceptance_rate']:.1%} |",
+            f"| targeted diagnostic | "
+            f"{metrics['openai']['targeted_answerable_correct']}/"
+            f"{metrics['openai']['targeted_answerable_total']} | "
+            f"{metrics['groq']['targeted_answerable_correct']}/"
+            f"{metrics['groq']['targeted_answerable_total']} |",
             "",
             "## Paired API latency",
             "",

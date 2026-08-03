@@ -166,17 +166,19 @@ for table relationships.
 JSON Schema as strict structured output — implemented, selected, and
 verified with live calls (see
 [Example interactions](#example-interactions-the-three-prd-assignment-questions-run-live)
-and [Evaluation](#evaluation)). A controlled comparison against Groq-hosted
-`openai/gpt-oss-120b` kept OpenAI as the default. The original bursty run hit
-22 HTTP 429s; a separate quota-compliant rerun eliminated provider errors and
-reduced median API latency from 8,474 ms to 1,871 ms, but scored 16/17 completed
-answerable attempts and 7/8 stable cases after one unchanged-policy rejection.
-Behavior remained 4/4. See the [paced report](evaluation/model_comparison/results/comparison-2026-08-02-groq-paced.md)
-and preserved [original report](evaluation/model_comparison/results/comparison-2026-08-02.md).
-Those reports remain frozen on prompt policy version 1. Prompt policy version 2
-now exposes the existing function allowlist and exact integer weighted average
-formula to both providers, but has not yet received a new live comparison.
-No provider failover, fallback model, or model voting was added.
+and [Evaluation](#evaluation)). A new paired comparison against Groq-hosted
+`openai/gpt-oss-120b` kept OpenAI as the default. With prompt policy version 2,
+both providers received the same function allowlist and exact integer weighted
+average formula. OpenAI passed 16/16 fixed answerable calls and all 8 two pass
+cases; Groq passed 14/16 and 7/8 after requesting clarification on the same
+answerable gross-revenue case three times. Both passed 4/4 behavioral cases and
+returned valid structured output on every call. Groq reduced paired median API
+latency from 9,615 ms to 1,851 ms (80.7%), but did not meet the conservative
+quality gate. See the [prompt v2 paired report](evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.md).
+The [version 1 paced report](evaluation/model_comparison/results/comparison-2026-08-02-groq-paced.md)
+and [original report](evaluation/model_comparison/results/comparison-2026-08-02.md)
+remain preserved. No provider failover, fallback model, or model voting was
+added.
 
 ## Safety
 
@@ -308,7 +310,7 @@ uv run mypy src
 
 The offline suite covers deterministic data, strict model decisions, SQL
 authorization, controlled execution, rendering, terminal-state mapping, and
-CLI behavior. The final verified run passed 993 tests without network access
+CLI behavior. The final verified run passed 1,002 tests without network access
 or API credentials.
 
 ## Limitations

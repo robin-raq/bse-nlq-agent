@@ -54,6 +54,36 @@ new prompt hash is `214bbf9f0260a5a33da06251c0dd0cbde2435d8d1f86d411363d7a35b90b
 the version 1 comparison artifacts were not altered and cannot serve as the
 OpenAI baseline for a future version 2 comparison.
 
+After the user confirmed a reset 200,000-token Groq daily allowance, Codex ran
+a new paired prompt version 2 comparison rather than reusing either provider's
+version 1 result. Each provider received one excluded warmup, 20 frozen base
+calls, and one paired targeted confirmation for the repeated disagreement.
+Groq starts were separated by at least 65 seconds, with no retries, repair, or
+failover. The 22 Groq calls used 111,300 returned tokens, leaving 88,700 from
+the confirmed allowance and producing no HTTP 429 or other transport errors.
+OpenAI passed 16/16 fixed answerable calls, 8/8 two pass consistency cases, and
+4/4 behavioral cases. Groq passed 14/16 fixed answerable calls, 7/8 two pass
+consistency cases, and 4/4 behavioral cases after requesting clarification on
+the same answerable gross-revenue case in two base passes and the targeted
+confirmation. The diagnostic call was reported separately instead of weighting
+the primary accuracy or latency aggregates. Groq reduced paired median API
+latency by 80.7%, from 9,615 ms to 1,851 ms, but
+did not match the conservative correctness gate, so the recommendation and
+product default remain OpenAI. The sanitized artifacts are
+`evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.*`;
+they contain generated SQL and aggregate usage but no raw provider payloads,
+headers, request identifiers, reasoning text, credentials, or exception text.
+
+Final review found that the reusable recommendation omitted the required p95
+latency gate and that the quota ledger reserved only 6,000 tokens despite the
+8,000 token per minute limit. The runner now requires both median and p95
+improvement, reserves the full 8,000 token call bound, and rejects reported
+usage above that bound before adding it to the ledger. Review also separated
+the adaptive targeted confirmation from the fixed base accuracy and latency
+aggregates. Five focused regression tests cover these corrections. No live call
+was repeated because the changes affect only conservative scoring, reporting,
+and future budget enforcement. The sanitized attempts remain unchanged.
+
 ## Tools
 
 - Claude Code (Claude Opus), including the Compound Engineering plugin

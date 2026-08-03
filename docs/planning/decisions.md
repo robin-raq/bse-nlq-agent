@@ -136,8 +136,8 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
   specific instruction. It advances `APPLICATION_POLICY_VERSION` to `2` and
   changes the frozen prompt SHA-256 to
   `214bbf9f0260a5a33da06251c0dd0cbde2435d8d1f86d411363d7a35b90bc1e7`.
-  Prior comparison artifacts remain immutable. A future comparison must rerun
-  both providers rather than reuse the version 1 OpenAI baseline.
+  Prior comparison artifacts remain immutable. The version 2 comparison reruns
+  both providers rather than reusing the version 1 OpenAI baseline.
 
 #### Locked U3 authorizer/execution rules
 

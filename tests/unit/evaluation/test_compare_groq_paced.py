@@ -70,11 +70,11 @@ def test_call_once_does_not_retry_after_rate_limit() -> None:
 
 def test_token_budget_stops_at_maximum_local_evaluation_budget() -> None:
     budget = TokenBudget(available_tokens=200_000, reserve_tokens=20_000)
-    for _ in range(24):
+    for _ in range(23):
         budget.account(input_tokens=5_000, output_tokens=1_000)
 
-    assert budget.accounted_tokens == 144_000
-    assert budget.projected_next_tokens == 6_000
+    assert budget.accounted_tokens == 138_000
+    assert budget.projected_next_tokens == 8_000
     assert budget.can_start_next()
 
     budget.account(input_tokens=5_000, output_tokens=1_000)
@@ -90,13 +90,22 @@ def test_token_budget_stops_before_reserved_daily_headroom() -> None:
     assert not budget.can_start_next()
 
 
+def test_token_budget_rejects_usage_above_the_quota_compliant_call_bound() -> None:
+    budget = TokenBudget(available_tokens=200_000, reserve_tokens=20_000)
+
+    with pytest.raises(RuntimeError, match="quota compliant call bound"):
+        budget.account(input_tokens=7_000, output_tokens=1_001)
+
+    assert budget.accounted_tokens == 0
+
+
 def test_missing_usage_is_accounted_as_a_marked_estimate() -> None:
     budget = TokenBudget(available_tokens=200_000, reserve_tokens=20_000)
 
     budget.account(input_tokens=None, output_tokens=None)
 
-    assert budget.accounted_tokens == 6_000
-    assert budget.estimated_tokens == 6_000
+    assert budget.accounted_tokens == 8_000
+    assert budget.estimated_tokens == 8_000
     assert budget.actual_tokens == 0
 
 

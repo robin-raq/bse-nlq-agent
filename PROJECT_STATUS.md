@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-08-02
+Last updated: 2026-08-03
 
 This is the operational handoff for coding agents. Read it before starting work to understand the verified repository state, the next implementation objective, and active constraints. Architecture authority remains in `docs/planning/decisions.md` and `ARCHITECTURE.md`.
 
@@ -124,32 +124,29 @@ Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/pl
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, fake-generator one-shot parsing, and policy version 2 alignment with the fixed SQL function allowlist plus integer weighted average arithmetic. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 104 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy and SQL-policy-alignment regression suites); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 18 comparison tests under `tests/unit/evaluation`; 993 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 104 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy and SQL-policy-alignment regression suites); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 26 comparison tests under `tests/unit/evaluation`; 1,002 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
-| Model comparison | Frozen OpenAI baseline: 24/24 answerable attempts and 4/4 behavior. Original unpaced Groq: 7/24 answerable, 1/4 behavior, and 22 HTTP 429s. Separate 65-second-paced Groq rerun: 16/17 completed answerable attempts, 7/8 stable cases, 4/4 behavior, 20/21 end-to-end success, no provider errors, and 1,871 ms median API latency (77.9% below OpenAI). One unchanged-policy rejection kept the recommendation at OpenAI; default unchanged. |
-| Prompt policy v2 follow up | Offline implementation complete. Both providers now receive the existing SQL function allowlist and exact integer weighted average formula. Prompt SHA-256 is `214bbf9f…`; prior live results remain frozen on version 1. No version 2 provider call has been made. |
+| Model comparison | Prompt policy v2 paired run: OpenAI 16/16 fixed answerable calls, 8/8 two pass consistency, 4/4 behavior, and 21/21 end to end; Groq 14/16 fixed answerable calls, 7/8 two pass consistency, 4/4 behavior, and 18/21 end to end. The targeted diagnostic was 1/1 for OpenAI and 0/1 for Groq. Groq requested clarification on the same answerable gross-revenue case in both base passes and the targeted confirmation. No transport or structured-output failures occurred. Groq median API latency was 1,851 ms versus 9,615 ms for OpenAI, an 80.7% paired reduction. Recommendation and product default remain OpenAI. Prior version 1 artifacts are preserved unchanged. |
+| Prompt policy v2 follow up | Live comparison complete. Both providers received the existing SQL function allowlist and exact integer weighted average formula. Prompt SHA-256 is `214bbf9f…`; the paired report is `evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.md`. |
 | Secrets | Credentials and the private exercise document remain untracked |
 
 Provider checks establish endpoint eligibility only. They do not establish SQL quality, comparative performance, or final model selection. Seed and anchor verification establish dataset correctness only; they do not establish model-generated SQL quality or an application query service. Metadata verification establishes business-meaning contracts only. Decision/prompt verification establishes envelope validation and deterministic prompt assembly only; they do not call a model or execute SQL. Persistent-build verification establishes artifact construction only. Read-only runtime verification establishes safe open/reconcile/close only; it does not validate, authorize, or execute model-generated SQL.
 
 ## Immediate next objective
 
-The prompt policy version 2 compatibility fix is complete offline. A new live
-comparison is optional future work after Groq quota capacity is confirmed. It
-must rerun both providers because the prompt hash changed. A larger holdout
-evaluation remains explicitly out of scope.
+The prompt policy version 2 compatibility fix and paired live comparison are
+complete. A larger holdout evaluation remains explicitly out of scope.
 
 ## Active blockers
 
-None for the product or offline implementation. A version 2 live comparison is
-not yet eligible to reuse any prior baseline because its prompt hash changed.
+None for the product or offline implementation.
 
-The controlled comparison supports keeping GPT-5 mini as the default. Compliant
-pacing removed Groq's rate-limit failures and preserved 4/4 behavior, but one
-policy-rejected completed generation left answerable accuracy at 16/17 and
-stable cases at 7/8 despite materially lower API latency.
+The prompt version 2 paired comparison supports keeping GPT-5 mini as the
+default. Compliant pacing avoided rate-limit failures and Groq was materially
+faster, but it repeatedly requested clarification for an answerable gross-
+revenue question. OpenAI met every correctness and reliability gate.
 
 ## Non-negotiable constraints
 

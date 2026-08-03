@@ -2,6 +2,29 @@
 
 AI tools were used as design and implementation assistants for this take-home project.
 
+## Final submission review
+
+Cursor (Grok) ran the final submission review on branch
+`cursor/final-submission-review` from `main@41d963b` in an isolated worktree.
+Parallel read-only audits covered security, correctness, and documentation;
+one writer applied fixes. Material corrections:
+
+- Unqualified `HAVING` columns were missing from SQLGlot `scope.columns` and
+  bypassed static authorization; fixed narrowly with regression tests.
+  Post-validation authorizer denials remain `internal_error` (architecture
+  decision unchanged) but now preserve generated/executed SQL for transparency.
+- Production OpenAI adapter sanitized provider exception text to a fixed
+  public message.
+- CLI now prints `executed_sql` under “Executed SQL” and `generated_sql` only
+  when not executed.
+- Documentation reconciled: stale “no Groq comparison” claim removed; NULLIF/
+  MAX framed as prompt policy v1 historical evidence; suite inventory updated
+  to 1018; D-010/D-011 and comparison README schedules clarified.
+
+No live provider calls were made. Comparison JSON/MD artifacts were left
+unchanged. Independent model-family review was not claimed beyond the audits
+above.
+
 ## Model comparison phase
 
 Codex coordinated three read-only reconnaissance reviews, one implementation

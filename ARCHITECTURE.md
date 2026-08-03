@@ -342,7 +342,11 @@ rejection rather than a truncated result.
 
 Automated tests must run without credentials, network access, model cost, or provider nondeterminism. They cover pure components, provider adapters with stubbed clients, database integration with a deterministic fake generator, the CLI, and each safety layer in isolation.
 
-Evaluation measures deployed model systems through the real pipeline. Development cases may guide prompt changes; the holdout is locked after the prompt, metadata, schema, candidates, and thresholds are frozen. Answerable cases are scored by executed-result equivalence with hand-reviewed reference queries, not SQL-string equality.
+Evaluation measures deployed model systems through the real pipeline. The
+compact 13-question evaluation set is the shipped evidence base. A larger
+locked holdout remains explicitly out of scope for this take-home.
+Answerable cases are scored by executed-result equivalence with hand-reviewed
+reference queries, not SQL-string equality.
 
 Safety is a non-compensatory gate: one unsafe execution disqualifies a candidate. Among candidates meeting the frozen quality gate, select the least expensive eligible system.
 
@@ -360,6 +364,7 @@ Python and dependencies are pinned with `uv`; seed generation and schema renderi
 - Currency formatting is name-convention based (`_cents`), not full projection-unit inference.
 - The row cap bounds materialization, while the progress handler bounds computation.
 - Prompt delimiting reduces injection risk but is not a security boundary.
-- The planned holdout is small, so results will be descriptive.
+- The planned holdout is small, so results will be descriptive. The larger
+  locked holdout contemplated in early design was not built for this submission.
 
 Deferred: PostgreSQL role enforcement, GUI, SQL repair, multi-turn memory, generalized provider abstraction, and full scope-aware semantic validation.

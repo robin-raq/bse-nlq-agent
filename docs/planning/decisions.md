@@ -13,8 +13,8 @@
 | D-007 | Explicit typed terminal states | Prevents rejected SQL from being presented as executed and distinguishes empty success from failure. |
 | D-008 | CLI only | Satisfies the exercise with minimal presentation code; all modes use the same service. |
 | D-009 | Offline deterministic automated tests | Eliminates credentials, cost, network failures, and model nondeterminism from application tests. |
-| D-010 | Development set plus locked holdout; result-equivalence scoring | Allows prompt iteration without tuning on final cases and accepts semantically equivalent SQL. |
-| D-011 | Standard-library JSONL logging to stderr | Preserves clean JSON stdout without adding a hosted observability stack. |
+| D-010 | Compact development/evaluation set with result-equivalence scoring; larger locked holdout deferred | Allows prompt iteration without a large holdout corpus. A larger holdout remains explicitly out of scope for this take-home. |
+| D-011 | Observability without a hosted stack | Design intent was lightweight stderr diagnostics without cloud observability. The shipped CLI does not emit structured JSONL completion telemetry; stderr is reserved for setup failures. |
 | D-012 | One `src/bse_nlq/` package | Avoids speculative packages and working-directory import mistakes. |
 | D-013 | Six-table schema: `venues`, `events`, `ticket_tiers`, `orders`, `order_items`, `refunds` | Normalizes list price to the tier so pricing questions have a source of truth, and keeps category a CHECK domain rather than a lookup table. The `order_items → ticket_tiers → events` hop is retained deliberately: it gives the join evaluation slice real depth. |
 | D-014 | Revenue uses actual paid price; fees are not modeled | `unit_price_cents` is the only price input; `face_value_cents` is descriptive list price. One revenue definition, no fee-inclusion ambiguity. |
@@ -31,7 +31,8 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
 - Exactly one approved read-only SQLite statement.
 - Whole-tree rejection of mutation, DDL, administrative, recursive, or clock-dependent constructs.
 - Physical tables checked against introspection; CTE and derived names handled separately.
-- No SQL rewriting: executed SQL equals generated SQL byte for byte.
+- No SQL rewriting beyond intentional outer-whitespace trimming: executed SQL
+  equals trimmed `original_sql` (normalized SQL is evidence only).
 - Read-only URI, `query_only`, default-deny authorizer, progress budget, and fetch cap.
 - Authorizer actions use an explicit action-code mapping, never a reverse lookup over `sqlite3` constants. Numeric values repeat across namespaces: action code 19 is `SQLITE_PRAGMA`, while the unrelated result code `SQLITE_CONSTRAINT` is also 19.
 - Unit/alias contradictions rejected before execution; unknown units remain unformatted.
@@ -55,8 +56,9 @@ Every provider response maps to four required fields: `status`, `sql`, `clarific
 - Identifier comparisons follow SQLite-compatible case-insensitive behavior,
   including quoted identifiers. Canonical output names come from application
   inventories; identifier normalization operates on a copy only.
-- Validation never rewrites the execution payload: `original_sql` remains the
-  later byte-for-byte payload and `normalized_sql` remains evidence only.
+- Validation never rewrites the execution payload beyond intentional outer
+  whitespace trimming: trimmed `original_sql` remains the later byte-for-byte
+  payload and `normalized_sql` remains evidence only.
   Casing or qualifier normalization must not replace `original_sql`.
 
 #### Locked U2 Slice 4B qualified-column rules

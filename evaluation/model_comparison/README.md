@@ -7,12 +7,12 @@ still defaults to `gpt-5-mini`.
 
 ## Frozen design
 
+Shared across comparison runners:
+
 - Both providers receive the same deterministic application prompt, schema
   metadata, as-of date, and strict `ModelDecision` JSON Schema.
 - Each attempt goes through `answer_question`, including local decision
   validation, SQL policy, read-only execution, and rendering.
-- The eight answerable SQL cases use execution-result invariants and run three
-  times per provider.
 - The four behavioral cases are scored separately. A behavioral case receives
   two more paired attempts only when the first pair disagrees or differs from
   the expected behavior.
@@ -31,6 +31,14 @@ still defaults to `gpt-5-mini`.
   acceptance is measured among generated-SQL decisions. Sanitized provider
   failure notes retain only fixed HTTP or connection categories, never provider
   text.
+
+**Attempt schedule differs by runner:**
+
+- Version 1 (`compare_models.py` / `compare_groq_paced.py`): eight answerable
+  cases use execution-result invariants and run **three times** per provider.
+- Version 2 (`compare_models_v2_paced.py`, authoritative): two fixed base
+  passes per answerable case, plus an optional targeted confirmation when the
+  base passes disagree or miss the expected outcome.
 
 The case taxonomy and semantic invariant identifiers are frozen in
 `manifest.json`. The runner records a source commit, prompt hash, schema hash,

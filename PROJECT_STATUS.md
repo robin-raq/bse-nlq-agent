@@ -55,12 +55,15 @@ were found and fixed along the way:
    verify the prompt text; the live evaluation verifies the model actually
    follows it.
 
-One live-verified, honest, un-fixed limitation: a ranked/superlative
-"average ticket price" question sometimes leads the model to `NULLIF` or a
-`MAX()` subquery — both genuine SQLite functions (confirmed via SQLite's
-own authorizer) outside the deliberately narrow 3-function allowlist. Not
-expanded, per this pass's explicit "no additional SQL semantics" scope
-boundary; documented in `evaluation/results_live.md`.
+One live-verified limitation under **prompt policy version 1**: a
+ranked/superlative "average ticket price" question sometimes led the model
+to `NULLIF` or a `MAX()` subquery — both genuine SQLite functions outside
+the deliberately narrow 3-function allowlist. Prompt policy version 2 now
+names that allowlist and supplies the integer weighted-average formula; the
+compact eval and paired comparison show OpenAI accepting SQL policy on those
+average cases. The specific PRD Barclays phrasing was not re-run live under
+version 2. The allowlist was not expanded. Documented in
+`evaluation/results_live.md`.
 
 A compact 13-question evaluation set (`evaluation/`) covers count, sum,
 average, ranking, join, gross revenue, net revenue, an explicit date range,
@@ -124,7 +127,7 @@ Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/pl
 | ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, fake-generator one-shot parsing, and policy version 2 alignment with the fixed SQL function allowlist plus integer weighted average arithmetic. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 104 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy and SQL-policy-alignment regression suites); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); CLI coverage under `tests/unit/cli`; 26 comparison tests under `tests/unit/evaluation`; full offline suite via `uv run pytest` (no network / credentials). Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Offline suite: **1018** tests via `uv run pytest` (no network / credentials). Breakdown: 104 decision/prompt; 69 metadata; 376 SQL-policy; 403 db (includes U3 authorizer/execution); 16 service; 19 CLI; 26 comparison; 5 root package/provider contract tests. Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. Final submission review: `docs/reviews/2026-08-03-final-submission-review.md`. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
@@ -136,8 +139,9 @@ Provider checks establish endpoint eligibility only. They do not establish SQL q
 
 ## Immediate next objective
 
-The prompt policy version 2 compatibility fix and paired live comparison are
-complete. A larger holdout evaluation remains explicitly out of scope.
+Final submission review on `cursor/final-submission-review` (unqualified
+HAVING authorization, provider/CLI transparency, documentation
+reconciliation). A larger holdout evaluation remains explicitly out of scope.
 
 ## Active blockers
 

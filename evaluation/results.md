@@ -81,7 +81,8 @@ net 6,460,000, tickets_sold 957) where they overlap.
   be tricked into producing it. In live mode, `unsupported`,
   `query_rejected`, and `invalid_sql` are all accepted safe outcomes for
   this case — refusing outright is at least as safe as generating-then-rejecting.
-- No live model comparison (OpenAI vs. Groq) was performed; a second
-  provider adapter was explicitly out of scope for this pass. A live run of
-  the one implemented provider (OpenAI/GPT-5 mini) has been recorded — see
-  `evaluation/results_live.md`.
+- A live OpenAI vs Groq comparison was later recorded under
+  `evaluation/model_comparison/` (authoritative prompt policy v2 report:
+  `results/comparison-2026-08-03-prompt-v2-paced.md`, recommendation
+  `keep_openai`). This reference-mode document remains the offline pipeline
+  check only; see `evaluation/results_live.md` for the GPT-5 mini live run.

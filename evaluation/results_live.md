@@ -103,12 +103,19 @@ version) against the real OpenAI API:
   `NULLIF` or `MAX`). This is the static policy and the SQLite authorizer
   correctly and safely rejecting SQL outside the supported subset — not a
   bug, and not expanded, per this pass's explicit "no additional SQL
-  semantics" scope boundary. **Known, honest limitation**: "average ticket
-  price, ranked/superlative" questions sometimes produce SQL patterns
-  (`NULLIF`, `MAX`-subquery) this narrow allowlist does not cover, even
-  though the simpler "average ticket price" phrasing (no ranking) reliably
-  succeeds with a `CASE`-based guard (see the `average_ticket_price` case
-  below, which passes consistently).
+  semantics" scope boundary.
+
+**Historical framing (prompt policy version 1):** This Barclays ranked-
+average evidence was captured under prompt policy version 1, before the
+prompt named the `SUM`/`COUNT`/`COALESCE` allowlist and the integer
+weighted-average `CASE` formula (prompt policy version 2,
+`APPLICATION_POLICY_VERSION = 2`). Under version 2, the compact evaluation's
+`average_ticket_price` case and the paired comparison's OpenAI answerable
+set accepted SQL policy at 100%; this specific PRD Barclays phrasing was
+**not re-run live under version 2**. The allowlist still rejects `NULLIF`
+and `MAX` if the model emits them. The simpler "average ticket price"
+phrasing (no ranking) reliably succeeds with a `CASE`-based guard (see the
+`average_ticket_price` case below).
 
 ### "Show me the top 5 event categories by total revenue."
 

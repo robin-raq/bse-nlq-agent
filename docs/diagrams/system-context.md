@@ -1,6 +1,6 @@
 # System Context
 
-> Approved target design; implementation is pending.
+> Approved design. The end-to-end CLI product path is implemented.
 
 ```mermaid
 flowchart TB
@@ -8,7 +8,7 @@ flowchart TB
     reviewer["Reviewer<br/>clones, installs, runs"]
 
     subgraph app["BSE NLQ Agent - project boundary"]
-        cli["CLI<br/>human output and JSON contract"]
+        cli["CLI<br/>human output and SQL transparency"]
         service["QueryService<br/>orchestration and terminal states"]
         core["Deterministic core<br/>dates, schema context, SQL policy,<br/>authorizer, unit lineage, formatting"]
         db[("SQLite<br/>read-only, generated from seed")]

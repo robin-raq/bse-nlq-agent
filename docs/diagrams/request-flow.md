@@ -1,14 +1,9 @@
 # Request Flow
 
+> Approved design. The end-to-end request pipeline is implemented.
 
-
-> Approved target design; implementation is pending.
-
-
-
-Projection-unit inference precedes execution because units come from projection expressions, not returned values.
-
-
+Currency formatting is applied after execution from the `_cents` column-name
+convention, not from projection-unit inference.
 
 ```mermaid
 flowchart TD
@@ -29,18 +24,15 @@ flowchart TD
     parse --> policy["Static AST policy<br/>single statement, read-only family,<br/>forbidden-node walk, physical tables,<br/>function policy, no clock constructs"]
 
     policy -->|"violation"| S_rej["query_rejected<br/>with reason code"]
-    policy --> units["Projection unit inference<br/>and alias-consistency validation"]
-
-    units -->|"proven contradiction"| S_rej
-    units --> exec["SQLite execution<br/>read-only URI, query_only,<br/>default-deny authorizer,<br/>instruction budget, fetch cap"]
+    policy --> exec["SQLite execution<br/>read-only URI, query_only,<br/>default-deny authorizer,<br/>instruction budget, fetch cap"]
 
     exec -->|"budget exceeded"| S_limit["execution_limit_exceeded"]
     exec -->|"SQLite error"| S_execerr["execution_error"]
+    exec -->|"row/column overflow"| S_limit
     exec --> raw["Raw execution result<br/>values preserved unchanged"]
 
-    raw --> fmt["Deterministic formatting<br/>currency only where unit is proven"]
+    raw --> fmt["Deterministic formatting<br/>currency when column ends in _cents"]
     fmt -->|"no rows"| S_empty["answered_empty"]
-    fmt -->|"cap exceeded"| S_trunc["result_truncated"]
     fmt --> S_ok["answered"]
 
     S_int["internal_error<br/>controlled catch-all for any<br/>unexpected application failure<br/>at any stage above"]
@@ -48,7 +40,7 @@ flowchart TD
     classDef ok fill:#e8f5ec,stroke:#2f7d4f
     classDef blocked fill:#fdf0e3,stroke:#b3701a
     classDef failed fill:#fbeaea,stroke:#a33
-    class S_ok,S_empty,S_trunc,S_clar,S_unsup ok
+    class S_ok,S_empty,S_clar,S_unsup ok
     class S_rej blocked
     class S_bad,S_invalid,S_limit,S_execerr,S_prov,S_int failed
 ```
@@ -65,8 +57,7 @@ flowchart TD
         p4["Forbidden-node walk, whole tree"]
         p5["Physical-table policy<br/>CTE and derived names excluded"]
         p6["Function policy, fail closed"]
-        p7["Unit / alias contradiction validation"]
-        p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7
+        p1 --> p2 --> p3 --> p4 --> p5 --> p6
     end
 
     subgraph runtime["CONNECTION AND RUNTIME ENFORCEMENT - SQLite"]
@@ -88,7 +79,4 @@ flowchart TD
     class rej bad
 ```
 
-
-
 Safety rejection and execution failure both stop the request. Rejection is authoritative policy; automatic execution repair is a deferred feature with separate cost, state, and evaluation requirements.
-

@@ -54,8 +54,9 @@ class QueryResult:
     ``generated_sql`` is populated whenever the model produced SQL, even if
     it was later rejected or failed to execute. ``executed_sql`` is populated
     only once the SQL was submitted to SQLite for execution (regardless of
-    whether execution ultimately succeeded), and is always byte-for-byte
-    identical to ``generated_sql`` — this application never rewrites SQL.
+    whether execution ultimately succeeded). It matches ``generated_sql``
+    apart from outer-whitespace trimming in the validator — this application
+    never rewrites SQL.
     ``message`` carries the clarification/explanation/error text for
     non-answered states. ``answer`` carries the rendered text for answered
     states.

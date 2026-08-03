@@ -150,6 +150,27 @@ def test_prompt_menu_selects_example(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cli._prompt_menu(cli.EXAMPLE_QUESTIONS) == EXAMPLE_QUESTIONS[1]
 
 
+def test_prompt_menu_rejects_invalid_then_quits(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answers = iter(["99", "", "q"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    assert cli._prompt_menu(cli.EXAMPLE_QUESTIONS) is None
+    err_or_out = capsys.readouterr().out
+    assert "Enter 1-" in err_or_out
+
+
+def test_prompt_menu_empty_custom_retries(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answers = iter(["0", "", "q"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    assert cli._prompt_menu(cli.EXAMPLE_QUESTIONS) is None
+    assert "Empty question" in capsys.readouterr().out
+
+
 def test_render_answered_shows_executed_sql_label() -> None:
     result = QueryResult(
         terminal_state=TerminalState.ANSWERED,

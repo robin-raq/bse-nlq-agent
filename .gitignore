@@ -53,3 +53,7 @@ node_modules/
 docs/local/
 docs/planning/*.local.md
 AI_USAGE.local.md
+
+# Internal teaching artifacts (not part of the candidate submission)
+docs/layers/
+docs/learn-site/

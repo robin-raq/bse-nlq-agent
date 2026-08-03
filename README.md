@@ -15,6 +15,8 @@ deterministic rendering, and SQL transparency. See
 
 ## Setup (five minutes)
 
+Prerequisites: [uv](https://docs.astral.sh/uv/) and Python 3.13 (see `.python-version`).
+
 Fastest reviewer path:
 
 ```bash
@@ -51,6 +53,62 @@ No API key yet? Run the offline reference demo (no network, no credits):
 ```bash
 uv run python evaluation/run.py
 ```
+
+## Interactive demo
+
+`make dev` opens the sample-question menu. Selecting the first example runs the
+same end-to-end path as a one-shot ask: prompt → model decision → SQL policy →
+authorizer-backed execution → rendered answer with executed SQL.
+
+![Terminal capture of make dev: sample-question menu, choosing example 1, rendered top-5 category revenue answer, and executed SQL](docs/assets/cli-demo.png)
+
+Copyable transcript of that capture:
+
+```text
+$ make dev
+Database: ./bse_nlq.db
+Each turn makes one live model call. Press q at the menu to exit.
+
+BSE NLQ — pick an example or type your own
+
+  1. Show me the top 5 event categories by total revenue.
+  2. How many events are still scheduled?
+  3. How many tickets have been sold in total?
+  4. What is the average ticket price?
+  5. Which event generated the most revenue?
+  6. How many tickets were sold for events at Ironworks Music Hall?
+  7. What is our total gross ticket revenue?
+  8. How much gross revenue came from events in February 2026?
+  0. Type your own question
+  q. Quit
+
+Choice: 1
+
+> Show me the top 5 event categories by total revenue.
+
+category | all_time_gross_ticket_revenue_cents
+concert | $21,900.00
+basketball | $18,000.00
+family | $17,000.00
+comedy | $9,800.00
+hockey | $6,000.00
+
+Executed SQL:
+SELECT e.category, SUM(oi.line_gross_cents) AS all_time_gross_ticket_revenue_cents
+FROM order_items oi
+JOIN orders o ON oi.order_id = o.order_id
+JOIN ticket_tiers tt ON oi.tier_id = tt.tier_id
+JOIN events e ON tt.event_id = e.event_id
+WHERE o.status = 'completed'
+GROUP BY e.category
+ORDER BY all_time_gross_ticket_revenue_cents DESC
+LIMIT 5;
+```
+
+The answer and SQL match the live GPT-5 mini result for this question (see
+below). The image was captured from the real CLI and database path with a
+replayed model decision that returns that verified SQL — no API key or host
+paths appear in the capture.
 
 ## Example interactions: the three PRD assignment questions, run live
 
@@ -336,8 +394,8 @@ uv run mypy src
 
 The offline suite covers deterministic data, strict model decisions, SQL
 authorization, controlled execution, rendering, terminal-state mapping, and
-CLI behavior. The final verified run passed 1,006 tests without network access
-or API credentials.
+CLI behavior. Run `uv run pytest` for the current count; the suite is offline
+and does not require network access or API credentials.
 
 ## Limitations
 

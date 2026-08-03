@@ -36,11 +36,27 @@ The case taxonomy and semantic invariant identifiers are frozen in
 `manifest.json`. The runner records a source commit, prompt hash, schema hash,
 database logical fingerprint, and case-set hash before scored calls begin.
 
+## Runners (historical evidence)
+
+Three near-duplicate scripts record successive comparison stages. Keep all
+three; each matches a committed results artifact and is not interchangeable:
+
+| Script | Role | Artifact |
+|---|---|---|
+| `compare_models.py` | Original paired run (unpaced) | `results/comparison-2026-08-02.*` |
+| `compare_groq_paced.py` | Quota-compliant Groq rerun reusing a frozen OpenAI baseline | `results/comparison-2026-08-02-groq-paced.*` |
+| `compare_models_v2_paced.py` | Prompt policy v2 paired paced comparison (authoritative for the current default) | `results/comparison-2026-08-03-prompt-v2-paced.*` |
+
+Provider-availability failures (HTTP/connection/`provider_unavailable`) are
+reported separately from model-quality evidence (answer correctness, behavior,
+SQL-policy acceptance among generated decisions). Fast transport failures must
+not be read as latency wins.
+
 ## Run
 
 Commit the harness first so the worktree is clean and the source commit is
 frozen. Then run from a secret-safe subshell, sourcing the primary checkout's
-local environment without copying it:
+local environment without copying it. Example for the original runner:
 
 ```bash
 (
@@ -53,10 +69,13 @@ local environment without copying it:
 )
 ```
 
-The runner refuses an unclean worktree or existing output path. It records
-each attempt immediately in a sanitized JSON checkpoint. It never stores API
-keys, provider headers, raw response objects, request identifiers, reasoning
-text, exception details, or complete provider payloads.
+Use `compare_groq_paced.py` or `compare_models_v2_paced.py` the same way when
+reproducing those specific artifacts. Each runner refuses an unclean worktree
+or existing output path. It records each attempt immediately in a sanitized
+JSON checkpoint. It never stores API keys, provider headers, raw response
+objects, request identifiers, reasoning text, exception details, or complete
+provider payloads.
 
 The sample is intentionally small. Its strongest positive conclusion is
-`recommend_groq_for_review`; it never changes the product default.
+`recommend_groq_for_review`; it never changes the product default. The
+prompt-v2 paced run kept OpenAI.

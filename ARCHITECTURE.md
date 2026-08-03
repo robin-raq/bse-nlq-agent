@@ -11,6 +11,30 @@
 > (`bse_nlq.provider_openai`), the `bse-nlq ask` CLI (`bse_nlq.cli`), and
 > the frozen evaluation harness (`evaluation/`).
 
+## System overview
+
+One request enters through the CLI (`bse-nlq ask` or `make dev`), is
+orchestrated by `QueryService`, and returns a terminal result with SQL
+transparency. Clarification and unsupported decisions skip SQL policy and
+execution.
+
+```mermaid
+flowchart TD
+  user[User] --> cli["CLI<br/>bse-nlq ask / make dev"]
+  cli --> qs[QueryService]
+  qs --> prompt[Prompt builder]
+  meta[Semantic metadata] --> prompt
+  prompt --> openai["OpenAI GPT-5 mini<br/>strict ModelDecision JSON"]
+  openai --> validate[Decision validation]
+  validate -->|sql_generated| policy[Static SQL policy]
+  validate -->|clarification / unsupported| render[Result rendering]
+  policy --> exec["SQLite authorizer<br/>+ execution limits"]
+  db[(Deterministic SQLite DB)] --> exec
+  exec --> render
+  render --> cli
+  cli --> user
+```
+
 ## Principles
 
 - The model only converts a question into a typed decision.
@@ -26,13 +50,13 @@ question
   -> prompt assembly from schema and semantic metadata
   -> model decision
   -> local contract validation
-  -> SQLGlot policy and unit analysis
+  -> SQLGlot policy validation
   -> read-only SQLite execution
   -> deterministic formatting
   -> terminal state
 ```
 
-Projection-unit analysis occurs before execution. The application never rewrites generated SQL: when execution occurs, `generated_sql` and `executed_sql` are identical.
+The application never rewrites generated SQL: when execution occurs, `generated_sql` and `executed_sql` match apart from outer-whitespace trimming in the validator.
 
 ## Components
 
@@ -44,7 +68,7 @@ Projection-unit analysis occurs before execution. The application never rewrites
 | Prompt | Deterministic `build_prompt(PromptInput) -> BuiltPrompt` |
 | Decision | Strict `parse_model_decision_json` / `validate_model_decision` |
 | Provider adapter | Prompt submission and response normalization (`bse_nlq.provider_openai`) |
-| SQL policy | Parsing, structural validation, and unit inference |
+| SQL policy | Parsing, structural validation, and authorization |
 | Database | Schema/seed, persistent artifact build, read-only runtime open, authorizer, and execution limits |
 | Formatting | Deterministic human-readable output from executed values |
 | Evaluation | Frozen cases, reference queries, and reporting |
@@ -71,7 +95,7 @@ Implemented module paths for this phase:
 
 ## Model contract
 
-`QueryGenerator.generate(QueryRequest) -> ModelDecision` isolates provider code from the deterministic core. Offline tests use `decide_from_raw_generator(RawModelGenerator, BuiltPrompt) -> ModelDecision` so prompt construction and decision parsing can be exercised without a provider.
+`RawModelGenerator.complete(BuiltPrompt) -> str` isolates provider transport from the deterministic core; `decide_from_raw_generator` parses that string into a `ModelDecision`. A provider-neutral `QueryGenerator.generate(PromptInput) -> ModelDecision` protocol remains available for offline composition. Offline tests use `decide_from_raw_generator` so prompt construction and decision parsing can be exercised without a provider.
 
 `ModelDecision` has four required fields and rejects additional properties:
 
@@ -267,11 +291,11 @@ logged by default.
 
 ## Data and prompting
 
-The dataset will be synthetic, BSE-flavored ticketing data produced by a deterministic seed. SQLite owns structural facts; version-controlled semantic metadata at `src/bse_nlq/metadata/schema.json` owns meanings, units, synonyms, categories, visibility, and business definitions. The typed loader is `bse_nlq.metadata.load_semantic_metadata(connection)`, which validates the packaged JSON (including duplicate-key rejection), returns deeply frozen nested mappings, and reconciles every physical application column plus exact foreign-key join guidance against SQLite introspection without restating types, keys, or nullability.
+The dataset is synthetic, BSE-flavored ticketing data produced by a deterministic seed across six tables (`venues`, `events`, `ticket_tiers`, `orders`, `order_items`, `refunds`). The Mermaid ER diagram with primary keys, columns, and relationships derived from the physical DDL lives in [`docs/diagrams/schema-erd.md`](docs/diagrams/schema-erd.md) — not duplicated here. SQLite owns structural facts; version-controlled semantic metadata at `src/bse_nlq/metadata/schema.json` owns meanings, units, synonyms, categories, visibility, and business definitions. The typed loader is `bse_nlq.metadata.load_semantic_metadata(connection)`, which validates the packaged JSON (including duplicate-key rejection), returns deeply frozen nested mappings, and reconciles every physical application column plus exact foreign-key join guidance against SQLite introspection without restating types, keys, or nullability.
 
 Money is stored as integer cents. Dates use ISO text and half-open ranges. Relative dates are resolved from an explicit `as_of`; machine-clock SQL is prohibited. Default `as_of` is `2026-03-15` when the caller omits it.
 
-Revenue definitions must state included statuses and refund treatment. Currency formatting is applied only when a unit can be proven from the projection and trusted metadata. Unknown units remain raw; a proven alias/unit contradiction is rejected.
+Revenue definitions must state included statuses and refund treatment. Currency formatting is applied only when a result column name ends in the project's `_cents` convention; other columns render as raw values. Unknown units remain raw rather than guessed.
 
 `build_prompt` assembles stable system instructions (application rules, introspected physical schema, semantic metadata), a clearly delimited user-question block, and the ModelDecision response schema. Raw sample rows, seed literals, reconciliation totals, and `orders.order_ref` are excluded from model-facing sections.
 
@@ -324,7 +348,7 @@ Safety is a non-compensatory gate: one unsafe execution disqualifies a candidate
 
 ## Observability and reproducibility
 
-Structured logs go to stderr and omit raw questions, prompts, SQL, results, and model output by default. One completion event records state, reason, timings, provider metadata, reported token use, row count, and truncation.
+The shipped CLI does not emit structured completion telemetry. User-facing output shows the answer or failure message plus generated/executed SQL for transparency; stderr is reserved for setup failures such as a missing API key or database open error. Raw questions, prompts, API keys, and provider payloads are not logged by default.
 
 Python and dependencies are pinned with `uv`; seed generation and schema rendering are deterministic; `as_of` is explicit; formal evaluation artifacts are frozen and hashed.
 
@@ -333,7 +357,7 @@ Python and dependencies are pinned with `uv`; seed generation and schema renderi
 - Synthetic data and hand-written metadata limit external validity.
 - SQLite provides process-level rather than role-level read-only enforcement.
 - SQLite compilation, not the static validator, resolves full column scope.
-- Unit inference intentionally fails closed to unknown for unsupported expressions.
+- Currency formatting is name-convention based (`_cents`), not full projection-unit inference.
 - The row cap bounds materialization, while the progress handler bounds computation.
 - Prompt delimiting reduces injection risk but is not a security boundary.
 - The planned holdout is small, so results will be descriptive.

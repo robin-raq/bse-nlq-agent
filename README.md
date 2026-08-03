@@ -419,6 +419,17 @@ example `NULLIF` / `MAX`) where evaluation failures justify it — without
 weakening the default-deny safety posture. The bounded Groq comparison is
 already done and kept OpenAI as the default.
 
+Since this role works closely with the analytics team, one extension I would
+be interested in exploring is making the core architecture reusable across
+analytical domains. I would first validate the design against a genuinely
+different second domain, working with analysts to define its metric
+semantics, ambiguity rules, and representative questions. I would then
+extract the schema, semantic metadata, prompt policy, and evaluation set
+into a domain package while keeping the orchestration and safety layers
+shared. I would intentionally avoid generalizing before that second
+implementation so the abstraction reflects real differences rather than
+assumptions.
+
 ## Key design choices
 
 - A fixed pipeline instead of an agent framework: one model call, no

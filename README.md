@@ -13,6 +13,23 @@ structured output, SQL validation, controlled SQLite execution,
 deterministic rendering, and SQL transparency. See
 [Limitations](#limitations) for what is genuinely still out of scope.
 
+## Tech stack
+
+| Area | Choice | Why it fits this project |
+|---|---|---|
+| Runtime and dependencies | Python 3.13 with `uv` and a committed lockfile | Fast reviewer setup, strong standard-library support, and reproducible installs. |
+| Database | Locally generated SQLite | Zero-server setup for the take-home while still supporting read-only mode, an authorizer, and execution limits. |
+| Model integration | OpenAI Responses API with GPT-5 mini and strict JSON Schema output | Keeps the model boundary small and typed. A controlled Groq comparison was faster but less accurate, so GPT-5 mini remains the default. |
+| SQL validation | SQLGlot 30.14.0 using its SQLite AST | Enables structural, table, column, star, and function checks without executing untrusted SQL. |
+| Runtime enforcement | SQLite `mode=ro`, `query_only`, a default-deny authorizer, and resource caps | Provides an independent safety layer after static validation. |
+| Interface | `bse-nlq` command-line application | Delivers the complete question-to-answer workflow without adding web or deployment scope. |
+| Packaging | `src/` layout with Hatchling | Prevents working-directory import mistakes and packages the semantic metadata explicitly. |
+| Quality tooling | pytest, Ruff, and strict mypy | Keeps automated validation offline, deterministic, typed, and quick to run. |
+
+The concise rationale for each consequential choice is recorded in
+[`docs/planning/decisions.md`](docs/planning/decisions.md); component boundaries
+and trust relationships are detailed in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ## Setup (five minutes)
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) and Python 3.13 (see `.python-version`).

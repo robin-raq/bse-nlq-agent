@@ -186,6 +186,23 @@ def test_render_answered_shows_executed_sql_label() -> None:
     assert "SELECT COUNT(*) FROM events" in output
 
 
+def test_render_executed_sql_uses_executed_not_generated() -> None:
+    """Outer whitespace is trimmed before execution; CLI must show what ran."""
+    result = QueryResult(
+        terminal_state=TerminalState.ANSWERED,
+        answer="14",
+        generated_sql="  SELECT COUNT(*) FROM events  \n",
+        executed_sql="SELECT COUNT(*) FROM events",
+    )
+
+    output = cli.render_cli_output(result)
+
+    assert "Executed SQL:" in output
+    assert "SELECT COUNT(*) FROM events" in output
+    assert "  SELECT COUNT(*) FROM events  \n" not in output
+    assert "Generated SQL — not executed" not in output
+
+
 def test_render_rejected_shows_not_executed_label() -> None:
     result = QueryResult(
         terminal_state=TerminalState.QUERY_REJECTED,

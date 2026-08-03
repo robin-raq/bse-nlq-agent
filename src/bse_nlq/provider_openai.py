@@ -51,7 +51,7 @@ class OpenAIRawGenerator:
                 },
             )
         except APIError as error:
-            raise ProviderUnavailableError(str(error)) from error
+            raise ProviderUnavailableError("OpenAI provider request failed") from error
         return response.output_text
 
 

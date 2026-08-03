@@ -96,14 +96,13 @@ def render_cli_output(result: QueryResult) -> str:
     else:
         lines.append(_MESSAGES[result.terminal_state])
 
-    if result.generated_sql is not None:
-        label = (
-            "Executed SQL"
-            if result.executed_sql is not None
-            else "Generated SQL — not executed"
-        )
+    if result.executed_sql is not None:
         lines.append("")
-        lines.append(f"{label}:")
+        lines.append("Executed SQL:")
+        lines.append(result.executed_sql)
+    elif result.generated_sql is not None:
+        lines.append("")
+        lines.append("Generated SQL — not executed:")
         lines.append(result.generated_sql)
     return "\n".join(lines)
 

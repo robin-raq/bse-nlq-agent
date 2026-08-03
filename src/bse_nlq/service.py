@@ -166,8 +166,8 @@ def _answer_question(
         elif error.reason is ExecutionErrorReason.AUTHORIZATION_DENIED:
             # Statically validated SQL should never be authorizer-denied; if
             # it happens, that is an internal policy inconsistency, not a
-            # user-facing execution problem.
-            return QueryResult(terminal_state=TerminalState.INTERNAL_ERROR)
+            # user-facing execution problem. Preserve SQL for transparency.
+            state = TerminalState.INTERNAL_ERROR
         else:
             state = TerminalState.EXECUTION_ERROR
         return QueryResult(

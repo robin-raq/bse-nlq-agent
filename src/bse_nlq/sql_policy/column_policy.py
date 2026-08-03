@@ -50,24 +50,72 @@ def authorize_columns(
     an outer scope. An unqualified name inside ORDER BY that matches the
     scope's own projection alias resolves to that alias instead, without
     contributing a physical identity of its own.
+
+    Unqualified columns that appear only under ``HAVING`` are authorized
+    explicitly: SQLGlot's ``scope.columns`` omits them even though qualified
+    HAVING references are included.
     """
     referenced: set[tuple[str, str]] = set()
     seen_columns: set[int] = set()
     for scope in traverse_scope(expression):
         for column in scope.columns:
-            identity = id(column)
-            if identity in seen_columns:
-                continue
-            seen_columns.add(identity)
-            if isinstance(column.this, exp.Star):
-                continue
-            _authorize_column(
+            _authorize_seen_column(
                 column,
                 scope=scope,
                 inventory=inventory,
                 referenced=referenced,
+                seen_columns=seen_columns,
+            )
+        # SQLGlot's scope.columns includes qualified HAVING refs but omits
+        # unqualified ones. Authorize those missing unqualified HAVING
+        # columns through the same local-binding path; do not broaden to
+        # other clauses without a proven omission.
+        for column in _unqualified_having_columns(scope):
+            _authorize_seen_column(
+                column,
+                scope=scope,
+                inventory=inventory,
+                referenced=referenced,
+                seen_columns=seen_columns,
             )
     return frozenset(referenced)
+
+
+def _authorize_seen_column(
+    column: exp.Column,
+    *,
+    scope: Scope,
+    inventory: CanonicalColumnInventory,
+    referenced: set[tuple[str, str]],
+    seen_columns: set[int],
+) -> None:
+    identity = id(column)
+    if identity in seen_columns:
+        return
+    seen_columns.add(identity)
+    if isinstance(column.this, exp.Star):
+        return
+    _authorize_column(
+        column,
+        scope=scope,
+        inventory=inventory,
+        referenced=referenced,
+    )
+
+
+def _unqualified_having_columns(scope: Scope) -> tuple[exp.Column, ...]:
+    """Unqualified ``Column`` nodes under this scope's HAVING clause."""
+    if not isinstance(scope.expression, exp.Select):
+        return ()
+    having = scope.expression.args.get("having")
+    if having is None:
+        return ()
+    columns: list[exp.Column] = []
+    for column in having.find_all(exp.Column):
+        if column.args.get("table") is not None:
+            continue
+        columns.append(column)
+    return tuple(columns)
 
 
 def _authorize_column(

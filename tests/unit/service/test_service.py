@@ -161,6 +161,20 @@ def test_rejected_sql(seeded_database: ReadOnlyDatabase) -> None:
     assert result.executed_sql is None
 
 
+def test_unqualified_excluded_having_column_is_query_rejected(
+    seeded_database: ReadOnlyDatabase,
+) -> None:
+    """Regression: unqualified HAVING exclusions fail closed at validation."""
+    sql = "SELECT COUNT(*) FROM orders HAVING order_ref = 'secret'"
+    generator = _FakeGenerator(_decision_json(status="sql_generated", sql=sql))
+
+    result = answer_question(seeded_database, generator, "Count secret order refs.")
+
+    assert result.terminal_state is TerminalState.QUERY_REJECTED
+    assert result.generated_sql == sql
+    assert result.executed_sql is None
+
+
 def test_invalid_sql_parse_failure(seeded_database: ReadOnlyDatabase) -> None:
     generator = _FakeGenerator(
         _decision_json(status="sql_generated", sql="SELECT FROM WHERE !!!")
@@ -185,6 +199,31 @@ def test_execution_limit_exceeded(
     assert result.terminal_state is TerminalState.EXECUTION_LIMIT_EXCEEDED
     assert result.generated_sql is not None
     assert result.executed_sql == result.generated_sql
+
+
+def test_unexpected_authorizer_denial_preserves_sql(
+    monkeypatch: pytest.MonkeyPatch, seeded_database: ReadOnlyDatabase
+) -> None:
+    """Post-validation authorizer denial stays INTERNAL_ERROR but keeps SQL."""
+    import bse_nlq.service as service_module
+    from bse_nlq.db.errors import ExecutionErrorReason, SqlExecutionError
+
+    sql = "SELECT COUNT(*) AS total FROM events"
+
+    def _deny(_database: ReadOnlyDatabase, validated: object) -> object:
+        raise SqlExecutionError(
+            "denied",
+            reason=ExecutionErrorReason.AUTHORIZATION_DENIED,
+        )
+
+    monkeypatch.setattr(service_module, "execute_validated_sql", _deny)
+    generator = _FakeGenerator(_decision_json(status="sql_generated", sql=sql))
+
+    result = answer_question(seeded_database, generator, "How many events?")
+
+    assert result.terminal_state is TerminalState.INTERNAL_ERROR
+    assert result.generated_sql == sql
+    assert result.executed_sql == sql
 
 
 def test_provider_unavailable(seeded_database: ReadOnlyDatabase) -> None:

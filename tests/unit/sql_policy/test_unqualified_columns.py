@@ -123,3 +123,48 @@ def test_order_by_alias_over_aggregate_with_group_by_matches_anchor_pattern() ->
     assert result.referenced_columns == frozenset(
         {("events", "id"), ("events", "name")}
     )
+
+
+def test_unqualified_excluded_having_column_is_rejected() -> None:
+    # SQLGlot's scope.columns omits unqualified HAVING refs; they must still
+    # be authorized. order_ref is physical but prompt-excluded.
+    assert (
+        _rejection_reason("SELECT COUNT(*) FROM orders HAVING order_ref = 'secret'")
+        is SqlRejectionReason.EXCLUDED_COLUMN
+    )
+
+
+def test_unqualified_unknown_having_column_is_rejected() -> None:
+    assert (
+        _rejection_reason("SELECT COUNT(*) FROM orders HAVING no_such_col = 1")
+        is SqlRejectionReason.UNKNOWN_COLUMN
+    )
+
+
+def test_qualified_excluded_having_column_still_rejected() -> None:
+    # Qualified HAVING refs are already present in scope.columns; keep that path.
+    assert (
+        _rejection_reason(
+            "SELECT COUNT(*) FROM orders AS o HAVING o.order_ref = 'secret'"
+        )
+        is SqlRejectionReason.EXCLUDED_COLUMN
+    )
+
+
+def test_unqualified_allowed_having_physical_column_binds() -> None:
+    # Column appears only in HAVING so scope.columns is empty for it; the
+    # HAVING walk must still bind and record the physical identity.
+    result = _validate("SELECT COUNT(*) FROM orders HAVING id > 0")
+
+    assert result.referenced_columns == frozenset({("orders", "id")})
+
+
+def test_having_does_not_resolve_projection_alias() -> None:
+    # Slice 4C: WHERE / JOIN ON / GROUP BY / HAVING never see alias binding.
+    # "total" is only a projection alias here, so HAVING total is unknown.
+    assert (
+        _rejection_reason(
+            "SELECT SUM(id) AS total FROM events GROUP BY name HAVING total > 0"
+        )
+        is SqlRejectionReason.UNKNOWN_COLUMN
+    )

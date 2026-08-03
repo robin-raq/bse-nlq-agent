@@ -2,7 +2,8 @@
 
 ## Scope and candidate
 
-- Branch: `cursor/final-submission-review`
+- Branch: `cursor/final-submission-review` (four commits on `41d963b`:
+  `2acf8c5`, `9e55079`, `b79185e`, and this review tip)
 - Base: `main` @ `41d963b54455f36272e93bf4e73b848e6569f55f`
 - Worktree: `/home/tulle/Development/worktrees/bse-final-submission`
 - Comparison tip `77df600` is already an ancestor of main via merge `a7a63eb`

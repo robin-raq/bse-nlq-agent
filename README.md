@@ -404,48 +404,43 @@ and does not require network access or API credentials.
 - CLI only — no authentication, no deployment infrastructure, no polished
   web UI (by design: one service, one presentation layer).
 
-## What I'd do differently / extend with more time
+## What I'd do differently
 
-With more time, I would change the sequencing of the build. I spent too long
-completing horizontal layers of the system, especially the SQL policy and
-its test matrix, before proving a thin end-to-end path. In hindsight, I
-would have gotten one representative question working through the full flow
-first: prompt, model decision, validation, read-only execution, rendering,
-and CLI. Then I would have expanded safety and SQL coverage based on
-observed evaluation failures rather than trying to complete each layer
-comprehensively up front.
+Looking back, the product decisions that mattered most were forced by
+end-to-end evidence, not by finishing each layer in isolation. I spent too
+long completing horizontal slices — especially the SQL policy and its test
+matrix — before proving a thin path through prompt, model decision,
+validation, read-only execution, rendering, and CLI. Next time I would get
+one representative question working through that full flow first, then grow
+safety and SQL coverage from observed evaluation failures.
 
-I would also be more disciplined about test consolidation. The current suite
-gives strong confidence at the model-to-database boundary, but some of the
-parameterized and edge-case coverage exceeds what this take-home required.
-I would keep the business invariants, safety boundaries, and end-to-end
-cases, while consolidating duplicate helper-level and implementation-detail
-tests.
+I would also bring live-model evaluation and the reviewer experience forward
+earlier. Running the PRD-shaped questions sooner would have surfaced
+over-clarification and first-run friction when those product choices were
+cheaper to change. On tests, I would keep the business invariants, safety
+boundaries, and end-to-end cases that give real confidence at the
+model-to-database boundary, and consolidate duplicate helper-level or
+implementation-detail coverage that exceeds what this take-home needed.
 
-Finally, I would move the live-model evaluation and reviewer experience
-earlier. Running the PRD-shaped questions sooner would have exposed the
-over-clarification behavior and first-run friction earlier, when those
-product decisions were cheaper to change.
+## What I'd do with more time
 
-Natural extensions beyond that sequencing lesson: a larger holdout and more
-robust live-model evaluation; light observability around terminal state and
-latency (without logging secrets or raw SQL by default); replacing the
-synthetic seed with real or anonymized ticketing data so entity resolution
-matches production questions; and a slightly broader function allowlist (for
-example `NULLIF` / `MAX`) where evaluation failures justify it — without
-weakening the default-deny safety posture. The bounded Groq comparison is
+With more time I would deepen evaluation and realism first: a larger holdout
+set, more robust live-model scoring, light observability around terminal
+state and latency (without logging secrets or raw SQL by default), and —
+where failures justify it — a slightly broader function allowlist such as
+`NULLIF` / `MAX`, without weakening the default-deny posture. Replacing the
+synthetic seed with real or anonymized ticketing data would also make entity
+resolution closer to production questions. The bounded Groq comparison is
 already done and kept OpenAI as the default.
 
-Since this role works closely with the analytics team, one extension I would
-be interested in exploring is making the core architecture reusable across
-analytical domains. I would first validate the design against a genuinely
-different second domain, working with analysts to define its metric
-semantics, ambiguity rules, and representative questions. I would then
-extract the schema, semantic metadata, prompt policy, and evaluation set
-into a domain package while keeping the orchestration and safety layers
-shared. I would intentionally avoid generalizing before that second
-implementation so the abstraction reflects real differences rather than
-assumptions.
+Because this role works closely with the analytics team, I would also want
+to test whether the core architecture can travel across analytical domains.
+I would start with a genuinely different second domain, defining metric
+semantics, ambiguity rules, and representative questions with analysts.
+Only after that second implementation worked would I extract schema,
+semantic metadata, prompt policy, and evaluation into a domain package,
+keeping orchestration and safety shared — so any abstraction reflects real
+differences rather than assumptions made too early.
 
 ## Key design choices
 

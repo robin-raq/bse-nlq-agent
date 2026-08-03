@@ -1,7 +1,6 @@
 # BSE Natural Language Query Agent
 
-A natural-language-to-SQL agent for the Brooklyn Sports and Entertainment AI
-Engineer take-home exercise. It turns a plain-English question into SQL,
+A natural-language-to-SQL agent. It turns a plain-English question into SQL,
 validates the generated query against a fixed safety policy, executes it
 against a read-only SQLite database under a default-deny authorizer, and
 returns a readable answer with the SQL that was run.

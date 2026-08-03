@@ -166,12 +166,19 @@ for table relationships.
 JSON Schema as strict structured output — implemented, selected, and
 verified with live calls (see
 [Example interactions](#example-interactions-the-three-prd-assignment-questions-run-live)
-and [Evaluation](#evaluation)). OpenAI was already a project dependency, had
-already passed a structured-output compatibility check, and is the simpler
-integration of the two candidates considered (the other,
-`openai/gpt-oss-120b` via Groq, remains untested — a second full adapter and
-a real head-to-head comparison were out of scope for the time available). No
-provider failover, no fallback model, no voting across multiple generations.
+and [Evaluation](#evaluation)). A new paired comparison against Groq-hosted
+`openai/gpt-oss-120b` kept OpenAI as the default. With prompt policy version 2,
+both providers received the same function allowlist and exact integer weighted
+average formula. OpenAI passed 16/16 fixed answerable calls and all 8 two pass
+cases; Groq passed 14/16 and 7/8 after requesting clarification on the same
+answerable gross-revenue case three times. Both passed 4/4 behavioral cases and
+returned valid structured output on every call. Groq reduced paired median API
+latency from 9,615 ms to 1,851 ms (80.7%), but did not meet the conservative
+quality gate. See the [prompt v2 paired report](evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.md).
+The [version 1 paced report](evaluation/model_comparison/results/comparison-2026-08-02-groq-paced.md)
+and [original report](evaluation/model_comparison/results/comparison-2026-08-02.md)
+remain preserved. No provider failover, fallback model, or model voting was
+added.
 
 ## Safety
 
@@ -303,7 +310,7 @@ uv run mypy src
 
 The offline suite covers deterministic data, strict model decisions, SQL
 authorization, controlled execution, rendering, terminal-state mapping, and
-CLI behavior. The final verified run passed 971 tests without network access
+CLI behavior. The final verified run passed 1,002 tests without network access
 or API credentials.
 
 ## Limitations

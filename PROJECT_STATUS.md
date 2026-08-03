@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-08-02
+Last updated: 2026-08-03
 
 This is the operational handoff for coding agents. Read it before starting work to understand the verified repository state, the next implementation objective, and active constraints. Architecture authority remains in `docs/planning/decisions.md` and `ARCHITECTURE.md`.
 
@@ -121,30 +121,32 @@ Design artifacts: `docs/planning/schema-design.md` (physical contract), `docs/pl
 | Schema DDL | Contract tests pass against a fresh in-memory connection: object inventory, per-column contracts, foreign keys and `foreign_key_check`, domain/numeric/attendance/date CHECKs (including a static null-safe `IS strftime` DDL guard), generated-column behavior, uniqueness, exact approved-index inventory, static DDL clock-safety, I-1–I-8 enforcement-boundary documentation, and caller-owned / schema-owned transaction-boundary behavior |
 | Seed data | Exact table counts 4/14/36/20/28/7 (109 total); primary-key and foreign-key integrity; domain inventories; generated `event_date` and `line_gross_cents`; nine unsold tiers; transaction success/rejection/second-load/mid-load/non-SQLite/`BaseException` failure contracts; FK-disabled rejection. I-1 through I-8 return zero violations on the complete seed; E11 equality uses completed-order grain with a cancelled-order regression. Overall reconciliation: gross 7,270,000 · refunded 810,000 · net 6,460,000 · tickets_sold 957 using completed-order refund filtering; channel/venue/category groupings and January 2026 purchase gross 2,000,000 match the published contract; cancelled-order refunds are excluded from refunded/net/A9; E5 direct-join fan-out regression passes. All 14 anchors execute with expected rows, columns, values, and ordering (A13 = E11 only; A14 = empty). Independent SHA-256 fingerprints pin `seed_data` tuples to the tracked manifest. Analytical trap regressions cover face vs unit price, gross vs net, refund fan-out, weighted average, capacities, E11 sold vs net, date fields, cancelled orders, attendance, and tier identity |
 | Semantic metadata | Packaged JSON at `src/bse_nlq/metadata/schema.json`; `load_semantic_metadata` validates and reconciles against a seeded in-memory database. Exactly six application tables; every physical column has semantic coverage; generated columns identified via introspection; join guidance exactly matches the five application FKs; `orders.order_ref` is the sole prompt exclusion; returned nested mappings are `MappingProxyType` / tuple / frozenset and reject mutation; wheel packaging excludes `*.json` by default and force-includes `schema.json` so installed-wheel regression fails closed without that include; no structural override of types/keys/nullability; drift and completeness tests fail closed; content and leak/static-safety scans clean |
-| ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, and fake-generator one-shot parsing. No provider network call; no SQL execution |
+| ModelDecision + prompt | Offline decision/prompt suite covers raw JSON parsing, duplicate keys, status invariants, immutability/source isolation, JSON Schema inventory alignment, schema/semantic rendering, prompt determinism, leak inventory, injection-boundary delimiting, fake-generator one-shot parsing, and policy version 2 alignment with the fixed SQL function allowlist plus integer weighted average arithmetic. No provider network call; no SQL execution |
 | Persistent database build | `build_database` publishes a validated six-table / 109-row SQLite file; evidence is precomputed from the closed temporary artifact; `overwrite=False` uses atomic no-clobber `os.link`; `overwrite=True` uses `os.replace` then removes exact destination `-wal`/`-shm`/`-journal` sidecars before success; only non-symlink regular files may be overwritten; destination refusal/race/special-file/failure-preservation, logical fingerprint reproducibility, developer module entry point, gitignore coverage, and installed-wheel build regression pass offline. Concurrent destination mutation during publication is unsupported. File SHA-256 is same-environment evidence only; `PRAGMA foreign_keys` remains connection-local |
 | Read-only runtime factory | `open_readonly_database` returns a ready `ReadOnlyDatabase`; path guards (including literal-`?` filenames vs missing-path classification, exact sibling sidecars, suffix-named mains), `mode=ro` independent of `query_only`, metadata inventories, fail-closed cleanup, and lifecycle contracts covered by 92 offline runtime tests; no public execute surface. Error-contract coverage includes unresolvable `~user` expansion and embedded-NUL paths normalizing to `DatabaseRuntimeError` with preserved cause, exception normalization localized to the specific path/SQLite/metadata operation that can legitimately raise it (so same-type programming defects from unrelated helpers propagate, not just differently-typed ones), SQLite close failures normalized with explicit cause, programming/resource/control-flow close failures propagated unchanged, failed close remaining retryable, and `database_path` readable after close while connection-dependent properties reject use |
-| Suite | Decision/prompt-focused tests: 100 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy regression suite); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 971 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
+| Suite | Decision/prompt-focused tests: 104 under `tests/unit/decision/` (includes the revenue-ranking ambiguity-policy and SQL-policy-alignment regression suites); 69 metadata; 369 SQL-policy; 403 under `tests/unit/db` (includes U3 authorizer/execution coverage); 14 under `tests/unit/service` (mocked end-to-end QueryService); 11 under `tests/unit/cli`; 26 comparison tests under `tests/unit/evaluation`; 1,002 in the full offline suite; Ruff lint and format; mypy strict; `uv lock --check`; `git diff --check`; credential-pattern scan clean on changed paths. |
 
 | OpenAI | GPT-5 mini accepted the strict four-field decision schema and returned a locally valid response |
 | Groq | `openai/gpt-oss-120b` accepted the same schema and returned a locally valid response |
+| Model comparison | Prompt policy v2 paired run: OpenAI 16/16 fixed answerable calls, 8/8 two pass consistency, 4/4 behavior, and 21/21 end to end; Groq 14/16 fixed answerable calls, 7/8 two pass consistency, 4/4 behavior, and 18/21 end to end. The targeted diagnostic was 1/1 for OpenAI and 0/1 for Groq. Groq requested clarification on the same answerable gross-revenue case in both base passes and the targeted confirmation. No transport or structured-output failures occurred. Groq median API latency was 1,851 ms versus 9,615 ms for OpenAI, an 80.7% paired reduction. Recommendation and product default remain OpenAI. Prior version 1 artifacts are preserved unchanged. |
+| Prompt policy v2 follow up | Live comparison complete. Both providers received the existing SQL function allowlist and exact integer weighted average formula. Prompt SHA-256 is `214bbf9f…`; the paired report is `evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.md`. |
 | Secrets | Credentials and the private exercise document remain untracked |
 
 Provider checks establish endpoint eligibility only. They do not establish SQL quality, comparative performance, or final model selection. Seed and anchor verification establish dataset correctness only; they do not establish model-generated SQL quality or an application query service. Metadata verification establishes business-meaning contracts only. Decision/prompt verification establishes envelope validation and deterministic prompt assembly only; they do not call a model or execute SQL. Persistent-build verification establishes artifact construction only. Read-only runtime verification establishes safe open/reconcile/close only; it does not validate, authorize, or execute model-generated SQL.
 
 ## Immediate next objective
 
-None outstanding for this take-home. The live smoke test and live
-evaluation are both complete (`evaluation/results_live.md`); remaining
-possible future work is a Groq comparison and a larger/holdout evaluation
-set, both explicitly out of scope for this pass.
+The prompt policy version 2 compatibility fix and paired live comparison are
+complete. A larger holdout evaluation remains explicitly out of scope.
 
 ## Active blockers
 
-None. The live OpenAI smoke test and the full live evaluation run both
-completed successfully against the real API.
+None for the product or offline implementation.
 
-Model quality and final selection are intentionally blocked on the frozen evaluation, not on missing access or endpoint compatibility.
+The prompt version 2 paired comparison supports keeping GPT-5 mini as the
+default. Compliant pacing avoided rate-limit failures and Groq was materially
+faster, but it repeatedly requested clarification for an answerable gross-
+revenue question. OpenAI met every correctness and reliability gate.
 
 ## Non-negotiable constraints
 
@@ -163,9 +165,9 @@ Model quality and final selection are intentionally blocked on the frozen evalua
 
 ## Not yet implemented
 
-A Groq comparison adapter and a larger/holdout evaluation set, both
-explicitly out of scope for this pass. The live OpenAI smoke test and live
-evaluation are complete, not pending.
+A larger/holdout evaluation set remains out of scope. The comparison-only Groq
+adapter and controlled live comparison are complete; they did not add runtime
+provider selection or change the product default.
 
 Implemented and test-verified: the physical schema DDL, deterministic seed
 loader, persistent builder, read-only runtime factory, semantic metadata

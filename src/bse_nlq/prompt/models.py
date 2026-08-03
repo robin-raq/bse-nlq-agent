@@ -14,7 +14,7 @@ from bse_nlq.metadata.models import SemanticMetadata
 DEFAULT_AS_OF: date = date(2026, 3, 15)
 
 # Bumped only when application prompt policy text changes intentionally.
-APPLICATION_POLICY_VERSION: int = 1
+APPLICATION_POLICY_VERSION: int = 2
 
 
 @dataclass(frozen=True, slots=True)

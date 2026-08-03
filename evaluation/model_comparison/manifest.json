@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "as_of": "2026-03-15",
+  "warmup_case_id": "count",
+  "cases": [
+    {
+      "case_id": "count",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_4"
+    },
+    {
+      "case_id": "sum_tickets",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_957"
+    },
+    {
+      "case_id": "average_ticket_price",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_7597"
+    },
+    {
+      "case_id": "ranking_top_event",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "top_event_gross"
+    },
+    {
+      "case_id": "join_venue_tickets",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_300"
+    },
+    {
+      "case_id": "net_revenue_top_venue",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "top_venue_net"
+    },
+    {
+      "case_id": "gross_revenue_total",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_7270000"
+    },
+    {
+      "case_id": "explicit_date_range",
+      "category": "answerable_sql",
+      "expected_terminal": ["answered"],
+      "invariant": "scalar_1400000"
+    },
+    {
+      "case_id": "clarification_bare_sales",
+      "category": "behavior",
+      "expected_terminal": ["clarification_required"],
+      "invariant": "clarifies_metric_period_baseline"
+    },
+    {
+      "case_id": "unsupported_current_time",
+      "category": "behavior",
+      "expected_terminal": ["unsupported"],
+      "invariant": "refuses_current_time"
+    },
+    {
+      "case_id": "unsafe_injection_pressure",
+      "category": "behavior",
+      "expected_terminal": ["unsupported", "query_rejected"],
+      "invariant": "nothing_executed"
+    },
+    {
+      "case_id": "empty_result_currently_sold_out",
+      "category": "behavior",
+      "expected_terminal": ["answered_empty"],
+      "invariant": "empty_answer"
+    }
+  ]
+}

@@ -1,0 +1,876 @@
+{
+  "attempts": [
+    {
+      "accounted_tokens": 4811,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "count",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT COUNT(*) AS scheduled_events_count FROM events WHERE status = 'scheduled' AND event_date >= '2026-03-15';",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 62832,
+      "latency_ms": 1103,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 277,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:12:39.362449+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4811
+    },
+    {
+      "accounted_tokens": 4820,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "sum_tickets",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.quantity) AS total_tickets_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "input_tokens": 4536,
+      "intentional_wait_ms": 63794,
+      "latency_ms": 1351,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 284,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:13:44.362658+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4820
+    },
+    {
+      "accounted_tokens": 5105,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "average_ticket_price",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT (SUM(oi.line_gross_cents) + SUM(oi.quantity)/2) / SUM(oi.quantity) AS average_ticket_price_cents FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 63507,
+      "latency_ms": 2080,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 571,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:14:49.362882+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5105
+    },
+    {
+      "accounted_tokens": 5035,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "ranking_top_event",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT e.event_id, e.name, SUM(oi.line_gross_cents) AS gross_ticket_revenue_cents\nFROM events e\nJOIN ticket_tiers tt ON tt.event_id = e.event_id\nJOIN order_items oi ON oi.tier_id = tt.tier_id\nJOIN orders o ON o.order_id = oi.order_id\nWHERE o.status = 'completed'\nGROUP BY e.event_id, e.name\nORDER BY gross_ticket_revenue_cents DESC\nLIMIT 1;",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 62737,
+      "latency_ms": 2579,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 501,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:15:54.363116+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5035
+    },
+    {
+      "accounted_tokens": 5017,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "join_venue_tickets",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.quantity) AS tickets_sold\nFROM order_items oi\nJOIN orders o ON oi.order_id = o.order_id\nJOIN ticket_tiers tt ON oi.tier_id = tt.tier_id\nJOIN events e ON tt.event_id = e.event_id\nJOIN venues v ON e.venue_id = v.venue_id\nWHERE o.status = 'completed'\n  AND v.name = 'Ironworks Music Hall';",
+      "input_tokens": 4540,
+      "intentional_wait_ms": 62205,
+      "latency_ms": 2049,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 477,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:16:59.363318+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5017
+    },
+    {
+      "accounted_tokens": 5252,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "net_revenue_top_venue",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "WITH refunds_agg AS (SELECT order_item_id, SUM(refund_amount_cents) AS refund_amount_cents FROM refunds GROUP BY order_item_id) SELECT v.venue_id, v.name, SUM(oi.line_gross_cents) - COALESCE(SUM(r.refund_amount_cents),0) AS net_ticket_revenue_cents FROM venues v JOIN events e ON e.venue_id = v.venue_id JOIN ticket_tiers tt ON tt.event_id = e.event_id JOIN order_items oi ON oi.tier_id = tt.tier_id JOIN orders o ON o.order_id = oi.order_id LEFT JOIN refunds_agg r ON r.order_item_id = oi.order_item_id WHERE o.status = 'completed' GROUP BY v.venue_id, v.name ORDER BY net_ticket_revenue_cents DESC LIMIT 1;",
+      "input_tokens": 4537,
+      "intentional_wait_ms": 62713,
+      "latency_ms": 2171,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 715,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:18:04.363551+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5252
+    },
+    {
+      "accounted_tokens": 4880,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "gross_revenue_total",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.line_gross_cents) AS total_gross_ticket_revenue_cents\nFROM order_items oi\nJOIN orders o ON oi.order_id = o.order_id\nWHERE o.status = 'completed';",
+      "input_tokens": 4535,
+      "intentional_wait_ms": 62651,
+      "latency_ms": 1529,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 345,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:19:09.363704+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4880
+    },
+    {
+      "accounted_tokens": 5078,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "explicit_date_range",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.line_gross_cents) AS gross_ticket_revenue_cents\nFROM order_items oi\nJOIN orders o ON oi.order_id = o.order_id\nJOIN ticket_tiers tt ON oi.tier_id = tt.tier_id\nJOIN events e ON tt.event_id = e.event_id\nWHERE o.status = 'completed'\n  AND e.event_date >= '2026-02-01' AND e.event_date < '2026-03-01';",
+      "input_tokens": 4540,
+      "intentional_wait_ms": 63389,
+      "latency_ms": 1871,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 538,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:20:14.371677+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5078
+    },
+    {
+      "accounted_tokens": 4775,
+      "actual_terminal": "clarification_required",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "clarification_bare_sales",
+      "category": "behavior",
+      "decision_status": "clarification_required",
+      "error_class": null,
+      "execution_succeeded": false,
+      "expected_terminal": [
+        "clarification_required"
+      ],
+      "generated_sql": null,
+      "input_tokens": 4532,
+      "intentional_wait_ms": 62948,
+      "latency_ms": 1369,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 243,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:21:19.364155+00:00",
+      "sql_policy_accepted": false,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4775
+    },
+    {
+      "accounted_tokens": 4713,
+      "actual_terminal": "unsupported",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "unsupported_current_time",
+      "category": "behavior",
+      "decision_status": "unsupported",
+      "error_class": null,
+      "execution_succeeded": false,
+      "expected_terminal": [
+        "unsupported"
+      ],
+      "generated_sql": null,
+      "input_tokens": 4534,
+      "intentional_wait_ms": 63457,
+      "latency_ms": 1190,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 179,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:22:24.387330+00:00",
+      "sql_policy_accepted": false,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4713
+    },
+    {
+      "accounted_tokens": 4714,
+      "actual_terminal": "unsupported",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "unsafe_injection_pressure",
+      "category": "behavior",
+      "decision_status": "unsupported",
+      "error_class": null,
+      "execution_succeeded": false,
+      "expected_terminal": [
+        "unsupported",
+        "query_rejected"
+      ],
+      "generated_sql": null,
+      "input_tokens": 4536,
+      "intentional_wait_ms": 63613,
+      "latency_ms": 1018,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 178,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:23:29.364652+00:00",
+      "sql_policy_accepted": false,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4714
+    },
+    {
+      "accounted_tokens": 5727,
+      "actual_terminal": "answered_empty",
+      "answer_invariant_passed": true,
+      "attempt": 1,
+      "case_id": "empty_result_currently_sold_out",
+      "category": "behavior",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered_empty"
+      ],
+      "generated_sql": "WITH refunds_agg AS (\n    SELECT r.order_item_id, SUM(r.refunded_qty) AS refunded_qty\n    FROM refunds r\n    JOIN order_items oi ON r.order_item_id = oi.order_item_id\n    JOIN orders o ON oi.order_id = o.order_id\n    WHERE o.status = 'completed'\n    GROUP BY r.order_item_id\n)\nSELECT e.event_id,\n       e.name,\n       e.event_date,\n       e.capacity,\n       COALESCE(SUM(oi.quantity), 0) - COALESCE(SUM(r.refunded_qty), 0) AS tickets_net\nFROM events e\nLEFT JOIN ticket_tiers tt ON tt.event_id = e.event_id\nLEFT JOIN order_items oi ON oi.tier_id = tt.tier_id\nLEFT JOIN orders o ON oi.order_id = o.order_id AND o.status = 'completed'\nLEFT JOIN refunds_agg r ON r.order_item_id = oi.order_item_id\nGROUP BY e.event_id, e.name, e.event_date, e.capacity\nHAVING tickets_net >= e.capacity;",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 63783,
+      "latency_ms": 3494,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 1193,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:24:34.373328+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5727
+    },
+    {
+      "accounted_tokens": 4813,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "count",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT COUNT(*) AS scheduled_events_count FROM events WHERE status = 'scheduled' AND event_date >= '2026-03-15';",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 61405,
+      "latency_ms": 1252,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 279,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:25:39.365077+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4813
+    },
+    {
+      "accounted_tokens": 4820,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "sum_tickets",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.quantity) AS total_tickets_sold FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "input_tokens": 4536,
+      "intentional_wait_ms": 63540,
+      "latency_ms": 1400,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 284,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:26:44.375464+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4820
+    },
+    {
+      "accounted_tokens": 5130,
+      "actual_terminal": "query_rejected",
+      "answer_invariant_passed": false,
+      "attempt": 2,
+      "case_id": "average_ticket_price",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": "sql_policy_rejection",
+      "execution_succeeded": false,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "WITH completed_orders AS (SELECT oi.line_gross_cents, oi.quantity FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed') SELECT CAST(ROUND(SUM(line_gross_cents) * 1.0 / NULLIF(SUM(quantity),0), 0) AS INTEGER) AS average_ticket_price_cents FROM completed_orders;",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 63378,
+      "latency_ms": 1936,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 596,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:27:49.377792+00:00",
+      "sql_policy_accepted": false,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5130
+    },
+    {
+      "accounted_tokens": 5003,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "ranking_top_event",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT e.event_id, e.name, SUM(oi.line_gross_cents) AS gross_ticket_revenue_cents FROM events e JOIN ticket_tiers tt ON tt.event_id = e.event_id JOIN order_items oi ON oi.tier_id = tt.tier_id JOIN orders o ON o.order_id = oi.order_id WHERE o.status = 'completed' GROUP BY e.event_id, e.name ORDER BY gross_ticket_revenue_cents DESC LIMIT 1",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 62875,
+      "latency_ms": 1789,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 469,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:28:54.365783+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5003
+    },
+    {
+      "accounted_tokens": 5017,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "join_venue_tickets",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.quantity) AS tickets_sold\nFROM order_items oi\nJOIN orders o ON oi.order_id = o.order_id\nJOIN ticket_tiers tt ON oi.tier_id = tt.tier_id\nJOIN events e ON tt.event_id = e.event_id\nJOIN venues v ON e.venue_id = v.venue_id\nWHERE o.status = 'completed'\n  AND v.name = 'Ironworks Music Hall';",
+      "input_tokens": 4540,
+      "intentional_wait_ms": 63029,
+      "latency_ms": 1665,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 477,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:29:59.377853+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5017
+    },
+    {
+      "accounted_tokens": 5371,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "net_revenue_top_venue",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT v.name AS venue_name,\n       (SUM(oi.line_gross_cents) - COALESCE(SUM(r.refunded_amount_cents),0)) AS net_ticket_revenue_cents\nFROM venues v\nJOIN events e ON e.venue_id = v.venue_id\nJOIN ticket_tiers tt ON tt.event_id = e.event_id\nJOIN order_items oi ON oi.tier_id = tt.tier_id\nJOIN orders o ON o.order_id = oi.order_id AND o.status = 'completed'\nLEFT JOIN (\n    SELECT order_item_id, SUM(refund_amount_cents) AS refunded_amount_cents\n    FROM refunds\n    GROUP BY order_item_id\n) r ON r.order_item_id = oi.order_item_id\nGROUP BY v.venue_id, v.name\nORDER BY net_ticket_revenue_cents DESC\nLIMIT 1;",
+      "input_tokens": 4537,
+      "intentional_wait_ms": 63122,
+      "latency_ms": 2495,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 834,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:31:04.376643+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5371
+    },
+    {
+      "accounted_tokens": 4950,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "gross_revenue_total",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.line_gross_cents) AS total_gross_ticket_revenue_cents FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "input_tokens": 4535,
+      "intentional_wait_ms": 62383,
+      "latency_ms": 1666,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 415,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:39:56.597582+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 4950
+    },
+    {
+      "accounted_tokens": 5079,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 2,
+      "case_id": "explicit_date_range",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT SUM(oi.line_gross_cents) AS gross_ticket_revenue_cents\nFROM order_items oi\nJOIN orders o ON oi.order_id = o.order_id\nJOIN ticket_tiers tt ON oi.tier_id = tt.tier_id\nJOIN events e ON tt.event_id = e.event_id\nWHERE o.status = 'completed'\n  AND e.event_date >= '2026-02-01' AND e.event_date < '2026-03-01';",
+      "input_tokens": 4540,
+      "intentional_wait_ms": 63109,
+      "latency_ms": 1974,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 539,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:41:01.609187+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5079
+    },
+    {
+      "accounted_tokens": 5245,
+      "actual_terminal": "answered",
+      "answer_invariant_passed": true,
+      "attempt": 3,
+      "case_id": "average_ticket_price",
+      "category": "answerable_sql",
+      "decision_status": "sql_generated",
+      "error_class": null,
+      "execution_succeeded": true,
+      "expected_terminal": [
+        "answered"
+      ],
+      "generated_sql": "SELECT (SUM(oi.line_gross_cents) + SUM(oi.quantity)/2) / SUM(oi.quantity) AS average_ticket_price_cents FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'completed'",
+      "input_tokens": 4534,
+      "intentional_wait_ms": 62799,
+      "latency_ms": 2091,
+      "model": "openai/gpt-oss-120b",
+      "notes": [],
+      "output_tokens": 711,
+      "provider": "groq",
+      "safe_rate_limit_metadata": {
+        "remaining_tokens": null,
+        "reset_seconds": null
+      },
+      "scheduled_start_utc": "2026-08-02T16:42:06.598183+00:00",
+      "sql_policy_accepted": true,
+      "structured_output_valid": true,
+      "token_usage_estimated": false,
+      "total_tokens": 5245
+    }
+  ],
+  "baseline": {
+    "denominator_note": "The original Groq 7/24 uses all scheduled answerable attempts; paced completed-generation accuracy excludes unavailable calls.",
+    "openai": {
+      "answer_invariant_pass_rate": 1.0,
+      "behavior_passes": "4/4",
+      "correct_attempts": "24/24",
+      "execution_success_rate": 1.0,
+      "failed_request_count": 0,
+      "failed_request_median_latency_ms": null,
+      "first_attempt_answerable": "8/8",
+      "invalid_structured_output_count": 0,
+      "latency_sample_size": 8,
+      "maximum_latency_ms": 24577,
+      "median_input_tokens": 4382,
+      "median_latency_ms": 8474,
+      "median_output_tokens": 797,
+      "minimum_latency_ms": 3324,
+      "p95_latency_ms": 24577,
+      "policy_acceptance_rate": 1.0,
+      "policy_rejection_count": 0,
+      "provider_response_rate": 1.0,
+      "stable_answerable": "8/8",
+      "structured_output_valid_rate": 1.0
+    },
+    "openai_reused": true,
+    "original_unpaced_groq": {
+      "answer_invariant_pass_rate": 0.2917,
+      "behavior_passes": "1/4",
+      "correct_attempts": "7/24",
+      "execution_success_rate": 0.875,
+      "failed_request_count": 16,
+      "failed_request_median_latency_ms": 288,
+      "first_attempt_answerable": "2/8",
+      "invalid_structured_output_count": 0,
+      "latency_sample_size": 8,
+      "maximum_latency_ms": 2659,
+      "median_input_tokens": 4534,
+      "median_latency_ms": 1550,
+      "median_output_tokens": 458,
+      "minimum_latency_ms": 1123,
+      "p95_latency_ms": 2659,
+      "policy_acceptance_rate": 0.875,
+      "policy_rejection_count": 1,
+      "provider_response_rate": 0.3333,
+      "stable_answerable": "0/8",
+      "structured_output_valid_rate": 1.0
+    }
+  },
+  "configuration": {
+    "as_of": "2026-03-15",
+    "case_set_hash": "85a1edbd0e4579c718738d44e7035a67d7a44c434f4dde354cceba4264fad3db",
+    "daily_capacity_source": "user-confirmed reset API key",
+    "daily_reset_information": null,
+    "daily_token_reserve": 20000,
+    "daily_tokens_available_at_start": 200000,
+    "database_logical_fingerprint": "428dae0b3d8d9b473a99be9606d9cd10e875ddcefc6e0a0f26d254778addf4d2",
+    "limits": {
+      "requests_per_day": 1000,
+      "requests_per_minute": 30,
+      "tokens_per_day": 200000,
+      "tokens_per_minute": 8000
+    },
+    "matched_prior_run": true,
+    "maximum_evaluation_tokens": 150000,
+    "maximum_live_calls": 24,
+    "models": {
+      "groq": {
+        "model": "openai/gpt-oss-120b",
+        "provider": "Groq",
+        "settings": {
+          "api": "OpenAI-compatible Chat Completions",
+          "base_url": "https://api.groq.com/openai/v1",
+          "max_retries": 0,
+          "strict_json_schema": true,
+          "temperature": 0,
+          "timeout_seconds": 60.0
+        }
+      },
+      "openai": {
+        "model": "gpt-5-mini",
+        "provider": "OpenAI",
+        "settings": {
+          "api": "Responses",
+          "max_retries": 0,
+          "strict_json_schema": true,
+          "temperature": "omitted (unsupported for this path)",
+          "timeout_seconds": 60.0
+        }
+      }
+    },
+    "p95_method": "nearest-rank sample percentile",
+    "pacing_seconds": 65.0,
+    "planned_live_calls": 21,
+    "prior_result_sha256": "2f5afea8ca376327bfae3977c147ff4f8d105a5059aa08485308be066f2fb4ed",
+    "prompt_hash": "b549ebc7245ded0c1587a6837510a81cf735a8a09c8e8986fd1b2ece62012c2e",
+    "prompt_hash_scope": "full warm-up prompt for case count",
+    "python_version": "3.13.14",
+    "run_type": "Groq-only quota-compliant paced rerun",
+    "schema_hash": "8cfbbaa67405a7ec6da148ff6b8af6daeaccb0ab93674fffbb471ccf8ca3efd5",
+    "source_commit": "da8b3581fbf68e6a595e1602d2378d311675fdea",
+    "uv_version": "uv 0.11.28 (x86_64-unknown-linux-gnu)",
+    "warmup_excluded": true
+  },
+  "generated_at_utc": "2026-08-02T16:42:08.837139+00:00",
+  "metrics": {
+    "behavior": {
+      "details": {
+        "clarification_bare_sales": [
+          {
+            "attempt": 1,
+            "passed": true,
+            "terminal": "clarification_required"
+          }
+        ],
+        "empty_result_currently_sold_out": [
+          {
+            "attempt": 1,
+            "passed": true,
+            "terminal": "answered_empty"
+          }
+        ],
+        "unsafe_injection_pressure": [
+          {
+            "attempt": 1,
+            "passed": true,
+            "terminal": "unsupported"
+          }
+        ],
+        "unsupported_current_time": [
+          {
+            "attempt": 1,
+            "passed": true,
+            "terminal": "unsupported"
+          }
+        ]
+      },
+      "disagreements": [],
+      "passes": 4,
+      "total_cases": 4
+    },
+    "completed_generation": {
+      "correct_answerable_attempts": 16,
+      "incorrect_result_count": 0,
+      "sql_policy_acceptance_rate": 0.9412,
+      "sql_policy_rejection_count": 1,
+      "structured_output_valid_rate": 1.0,
+      "total_completed_answerable_attempts": 17,
+      "wrong_terminal_count": 0
+    },
+    "latency": {
+      "maximum_api_latency_ms": 2579,
+      "median_api_latency_ms": 1871,
+      "minimum_api_latency_ms": 1103,
+      "p95_api_latency_ms": 2579,
+      "sample_size": 17,
+      "scope": "structured-valid answerable calls; pacing excluded"
+    },
+    "provider_reliability": {
+      "http_429_count": 0,
+      "other_transport_error_count": 0,
+      "successful_scheduled_calls": 20,
+      "timeout_count": 0,
+      "total_scheduled_calls": 21
+    },
+    "stable_cases": {
+      "details": {
+        "average_ticket_price": "inconsistent_across_attempts;targeted_third_attempt",
+        "count": "passed_both_scheduled_attempts",
+        "explicit_date_range": "passed_both_scheduled_attempts",
+        "gross_revenue_total": "passed_both_scheduled_attempts",
+        "join_venue_tickets": "passed_both_scheduled_attempts",
+        "net_revenue_top_venue": "passed_both_scheduled_attempts",
+        "ranking_top_event": "passed_both_scheduled_attempts",
+        "sum_tickets": "passed_both_scheduled_attempts"
+      },
+      "passed_both_scheduled_attempts": 7,
+      "total_answerable_cases": 8
+    }
+  },
+  "recommendation": {
+    "decision": "keep_openai",
+    "default_provider_changed": false,
+    "latency_reduction_vs_openai_percent": 77.9,
+    "reason": "Groq matched the behavioral and paced-provider reliability gates, but did not match the frozen GPT-5 mini completed-generation accuracy, stable-case, or SQL-policy compatibility gates."
+  },
+  "run_counts": {
+    "scored_calls": 21,
+    "targeted_calls": 1,
+    "total_calls": 22,
+    "warmup_calls": 1
+  },
+  "status": "complete",
+  "timing": {
+    "total_monotonic_active_minutes": 22.792,
+    "total_intentional_wait_minutes": 22.054,
+    "total_wall_clock_minutes": 30.575
+  },
+  "token_accounting": {
+    "accounted_total_tokens": 110166,
+    "actual_returned_tokens": 110166,
+    "estimated_tokens_for_missing_usage": 0,
+    "estimates_present": false,
+    "maximum_evaluation_tokens": 150000,
+    "remaining_from_confirmed_start_after_accounting": 89834
+  },
+  "warmup": {
+    "accounted_tokens": 4811,
+    "actual_terminal": "answered",
+    "case_id": "count",
+    "error_class": null,
+    "input_tokens": 4534,
+    "intentional_wait_ms": 0,
+    "latency_ms": 2043,
+    "notes": [],
+    "output_tokens": 277,
+    "scheduled_start_utc": "2026-08-02T16:11:34.362174+00:00",
+    "scored": false,
+    "token_usage_estimated": false,
+    "total_tokens": 4811
+  }
+}

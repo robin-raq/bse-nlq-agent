@@ -2,6 +2,88 @@
 
 AI tools were used as design and implementation assistants for this take-home project.
 
+## Model comparison phase
+
+Codex coordinated three read-only reconnaissance reviews, one implementation
+writer, and three read-only closure reviews for the GPT-5 mini versus
+Groq-hosted GPT-OSS 120B comparison. AI helped build the comparison-only
+adapters, frozen manifest, execution-result invariants, repeated-call schedule,
+sanitized attempt records, and aggregate report. The key experiment prompt was
+the unchanged application prompt and strict `ModelDecision` schema; no
+provider-specific prompt, retry, SQL repair, or policy relaxation was used.
+
+Credentials were checked only for presence, sourced from the primary checkout
+inside command subshells, and never copied or printed. The artifacts exclude
+raw provider responses, headers, request identifiers, reasoning text, and
+exception messages. Independent review found and corrected three experiment
+defects before the reported rerun: failed requests entering latency statistics,
+transport failures polluting structured-output and policy denominators, and an
+overbroad `invalid_sql` safety outcome. It also added an explicit repeated-call
+correctness gate and sanitized HTTP failure categories.
+
+Validation used the offline reference evaluator, focused mocked provider and
+scoring tests, the full pytest suite, Ruff lint and format checks, mypy, `uv
+lock --check`, `git diff --check`, staged secret scans, and isolated wheel
+installation.
+
+After the original run was dominated by HTTP 429s, Codex added a separate
+Groq-only runner with the user-supplied 30 RPM / 8,000 TPM / 200,000 TPD limits.
+It used a monotonic 65-second start interval, no retries, a 150,000-token local
+cap, and 20,000 tokens of reserved daily headroom. The live command sourced the
+ignored primary-checkout `.env` only inside its subshell and reused the frozen
+OpenAI baseline after all prompt, schema, case-set, and database hashes matched.
+The 22-call run used 110,166 actual tokens: Groq returned valid structured
+output on every call, had no transport errors, passed behavior 4/4, reduced
+median API latency to 1,871 ms, and scored 16/17 completed answerable attempts
+and 7/8 stable cases after one SQL-policy rejection. The recommendation remains
+`keep_openai`; the default provider was not changed.
+
+The live entry point was `uv run python
+evaluation/model_comparison/compare_groq_paced.py` with explicit JSON,
+Markdown, prior-result, and `--daily-tokens-available-at-start 200000`
+arguments. Validation reran the focused comparison tests and full offline suite,
+then Ruff, mypy, lock, diff, artifact-integrity, pacing, and secret checks.
+
+A follow up offline change addressed the one paced stability failure without
+weakening SQL policy. Codex identified that the validator allowed only `SUM`,
+`COUNT`, and `COALESCE`, while prompt policy version 1 did not expose that
+inventory. Prompt policy version 2 now names the allowlist and supplies the
+existing exact integer weighted average formula, with regression tests for the
+contract and a deliberate policy version bump. No provider call was made. The
+new prompt hash is `214bbf9f0260a5a33da06251c0dd0cbde2435d8d1f86d411363d7a35b90bc1e7`;
+the version 1 comparison artifacts were not altered and cannot serve as the
+OpenAI baseline for a future version 2 comparison.
+
+After the user confirmed a reset 200,000-token Groq daily allowance, Codex ran
+a new paired prompt version 2 comparison rather than reusing either provider's
+version 1 result. Each provider received one excluded warmup, 20 frozen base
+calls, and one paired targeted confirmation for the repeated disagreement.
+Groq starts were separated by at least 65 seconds, with no retries, repair, or
+failover. The 22 Groq calls used 111,300 returned tokens, leaving 88,700 from
+the confirmed allowance and producing no HTTP 429 or other transport errors.
+OpenAI passed 16/16 fixed answerable calls, 8/8 two pass consistency cases, and
+4/4 behavioral cases. Groq passed 14/16 fixed answerable calls, 7/8 two pass
+consistency cases, and 4/4 behavioral cases after requesting clarification on
+the same answerable gross-revenue case in two base passes and the targeted
+confirmation. The diagnostic call was reported separately instead of weighting
+the primary accuracy or latency aggregates. Groq reduced paired median API
+latency by 80.7%, from 9,615 ms to 1,851 ms, but
+did not match the conservative correctness gate, so the recommendation and
+product default remain OpenAI. The sanitized artifacts are
+`evaluation/model_comparison/results/comparison-2026-08-03-prompt-v2-paced.*`;
+they contain generated SQL and aggregate usage but no raw provider payloads,
+headers, request identifiers, reasoning text, credentials, or exception text.
+
+Final review found that the reusable recommendation omitted the required p95
+latency gate and that the quota ledger reserved only 6,000 tokens despite the
+8,000 token per minute limit. The runner now requires both median and p95
+improvement, reserves the full 8,000 token call bound, and rejects reported
+usage above that bound before adding it to the ledger. Review also separated
+the adaptive targeted confirmation from the fixed base accuracy and latency
+aggregates. Five focused regression tests cover these corrections. No live call
+was repeated because the changes affect only conservative scoring, reporting,
+and future budget enforcement. The sanitized attempts remain unchanged.
+
 ## Tools
 
 - Claude Code (Claude Opus), including the Compound Engineering plugin
@@ -758,6 +840,6 @@ controlled execution boundary are next.
 
 I made the final design decisions and manually reviewed AI-generated proposals and artifacts. During review, I corrected issues including overly broad safety claims, SQL validation rules that would reject valid aliases and CTEs, unsafe logging defaults, unsupported factual assumptions, and formatting that could overstate result semantics.
 
-The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, the complete SQL-policy Slices 1–4D, the default-deny SQLite authorizer plus controlled execution boundary (U3), the end-to-end `QueryService`, the `bse-nlq ask` CLI, and the OpenAI adapter are implemented and test-verified — **the full product vertical flow works, verified against both a mocked provider and the real GPT-5 mini model.** A full-scale statistical model-quality evaluation (beyond the 13-question set) and a Groq comparison remain out of scope for this pass. Generated database files remain untracked local artifacts.
+The SQLite physical schema, deterministic 109-row seed, JSON semantic metadata sidecar, strict ModelDecision validation, deterministic prompt construction, persistent database builder, read-only runtime database factory, the complete SQL-policy Slices 1–4D, the default-deny SQLite authorizer plus controlled execution boundary (U3), the end-to-end `QueryService`, the `bse-nlq ask` CLI, and the OpenAI adapter are implemented and test-verified — **the full product vertical flow works, verified against both a mocked provider and the real GPT-5 mini model.** The bounded Groq comparison is also complete and supports retaining GPT-5 mini; only a larger holdout evaluation remains out of scope. Generated database files remain untracked local artifacts.
 
 Secrets and private exercise materials were not committed. API credentials were used only through ignored local environment configuration and were not printed or persisted.

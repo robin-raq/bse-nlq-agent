@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from bse_nlq import cli
+from bse_nlq.cli import EXAMPLE_QUESTIONS
 from bse_nlq.db.build import build_database
 from bse_nlq.prompt.models import BuiltPrompt
 from bse_nlq.service import QueryResult, TerminalState
@@ -37,6 +38,13 @@ def test_build_arg_parser_parses_ask_question() -> None:
     assert args.db is None
 
 
+def test_build_arg_parser_allows_ask_without_question() -> None:
+    args = cli.build_arg_parser().parse_args(["ask"])
+
+    assert args.command == "ask"
+    assert args.question is None
+
+
 def test_build_arg_parser_accepts_db_override() -> None:
     args = cli.build_arg_parser().parse_args(["ask", "q", "--db", "/tmp/x.db"])
 
@@ -51,7 +59,9 @@ def test_missing_api_key_returns_error_without_network(
     code = cli.main(["ask", "How many events?"])
 
     assert code == 2
-    assert "OPENAI_API_KEY" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "OPENAI_API_KEY" in err
+    assert "evaluation/run.py" in err
 
 
 def test_missing_database_returns_error_without_network(
@@ -84,6 +94,60 @@ def test_successful_ask_prints_answer_and_executed_sql(
     assert "14" in out
     assert "Executed SQL:" in out
     assert "SELECT COUNT(*) AS total FROM events" in out
+
+
+def test_interactive_menu_runs_selected_example(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(cli, "OpenAIRawGenerator", _FakeGenerator)
+    destination = tmp_path / "app.db"
+    build_database(destination)
+    answers = iter(["1", "q"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    code = cli.main(["ask", "--db", str(destination)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert EXAMPLE_QUESTIONS[0] in out or "top 5 event categories" in out
+    assert "Executed SQL:" in out
+
+
+def test_interactive_custom_question_then_quit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(cli, "OpenAIRawGenerator", _FakeGenerator)
+    destination = tmp_path / "app.db"
+    build_database(destination)
+    answers = iter(["0", "How many events?", "q"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    code = cli.main(["ask", "--db", str(destination)])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "How many events?" in out
+    assert "14" in out
+
+
+def test_prompt_menu_quits(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = iter(["q"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    assert cli._prompt_menu(cli.EXAMPLE_QUESTIONS) is None
+
+
+def test_prompt_menu_selects_example(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = iter(["2"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    assert cli._prompt_menu(cli.EXAMPLE_QUESTIONS) == EXAMPLE_QUESTIONS[1]
 
 
 def test_render_answered_shows_executed_sql_label() -> None:

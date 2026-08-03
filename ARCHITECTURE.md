@@ -1,15 +1,15 @@
 # Architecture
 
 > Approved target design. The full vertical flow is implemented and
-> test-verified offline: schema, seed, semantic metadata, `ModelDecision`
-> validation, deterministic prompt construction, the persistent database
-> builder, the read-only runtime factory, the complete SQL-policy
-> foundation (`bse_nlq.sql_policy`: parsing, structure, table/column/star/
-> function authorization), the default-deny SQLite authorizer and controlled
-> execution boundary (`bse_nlq.db.execution`), `QueryService`
-> (`bse_nlq.service`), the OpenAI adapter (`bse_nlq.provider_openai`), and
-> the `bse-nlq ask` CLI (`bse_nlq.cli`). Only evaluation and a live provider
-> smoke test remain.
+> test-verified offline and live: schema, seed, semantic metadata,
+> `ModelDecision` validation, deterministic prompt construction, the
+> persistent database builder, the read-only runtime factory, the complete
+> SQL-policy foundation (`bse_nlq.sql_policy`: parsing, structure,
+> table/column/star/function authorization), the default-deny SQLite
+> authorizer and controlled execution boundary (`bse_nlq.db.execution`),
+> `QueryService` (`bse_nlq.service`), the OpenAI adapter
+> (`bse_nlq.provider_openai`), the `bse-nlq ask` CLI (`bse_nlq.cli`), and
+> the frozen evaluation harness (`evaluation/`).
 
 ## Principles
 
@@ -43,10 +43,10 @@ Projection-unit analysis occurs before execution. The application never rewrites
 | Schema context | Introspection plus curated business metadata |
 | Prompt | Deterministic `build_prompt(PromptInput) -> BuiltPrompt` |
 | Decision | Strict `parse_model_decision_json` / `validate_model_decision` |
-| Provider adapter | Prompt submission and response normalization (pending) |
+| Provider adapter | Prompt submission and response normalization (`bse_nlq.provider_openai`) |
 | SQL policy | Parsing, structural validation, and unit inference |
-| Database | Schema/seed, persistent artifact build, read-only runtime open; authorizer and limits pending |
-| Formatting | Human and JSON output from executed values |
+| Database | Schema/seed, persistent artifact build, read-only runtime open, authorizer, and execution limits |
+| Formatting | Deterministic human-readable output from executed values |
 | Evaluation | Frozen cases, reference queries, and reporting |
 
 All implementation lives in the single `src/bse_nlq/` package. Modules should be created only when they contain real behavior.
@@ -57,7 +57,10 @@ Implemented module paths for this phase:
 - `bse_nlq.metadata` — `load_semantic_metadata`
 - `bse_nlq.decision` — `ModelDecision`, `parse_model_decision_json`, `model_decision_json_schema`
 - `bse_nlq.prompt` — `PromptInput`, `BuiltPrompt`, `build_prompt`
-- `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; no live adapters)
+- `bse_nlq.generator` — provider-neutral `RawModelGenerator` / `decide_from_raw_generator` (offline boundary; live adapter is `bse_nlq.provider_openai`)
+- `bse_nlq.provider_openai` — GPT-5 mini Responses API adapter returning raw JSON text
+- `bse_nlq.service` — `answer_question` / `QueryResult` / `TerminalState`
+- `bse_nlq.cli` — `bse-nlq ask [question] [--db PATH]` (omit question for interactive examples)
 - `bse_nlq.sql_policy` — Slices 1–4D (complete): `validate_sql` / `ValidatedSql`
   with bounded parsing, structure policy, physical-table authorization,
   canonical column inventories, internal CTE/derived/Union output-name
@@ -193,9 +196,9 @@ calls inside them are still checked independently. Allowed names populate
 `referenced_functions`. Static policy uses the parsed SQLite AST, never regex
 or semicolon heuristics as the primary authority. Rejected SQL will expose
 `generated_sql` but leave `executed_sql` null. **The static SQL-safety
-foundation (Slices 1–4D) and the U3 authorizer/execution boundary are both
-now complete**; `QueryService`, provider adapters, and the product CLI
-remain.
+foundation (Slices 1–4D), the U3 authorizer/execution boundary,
+`QueryService`, the OpenAI provider adapter, and the product CLI are all
+complete.**
 
 Physical-source classification uses only `scope.sources`: `exp.Table` is a
 physical candidate; nested `Scope` is CTE/derived. `scope.tables`, raw
@@ -228,8 +231,9 @@ project's frozen terminal-state contract
 intentionally not implemented: U3 hard-rejects row/column overflow rather
 than truncating, so it is unreachable by design. `generated_sql` is set
 whenever the model produced SQL, even if later rejected; `executed_sql` is
-set only once SQL was submitted to SQLite, and is always byte-identical to
-`generated_sql`. Only the outermost `answer_question` catches a bare
+set only once SQL was submitted to SQLite, and matches `generated_sql`
+apart from outer-whitespace trimming performed by the validator. Only the
+outermost `answer_question` catches a bare
 `Exception`, mapping any unexpected failure to `internal_error`; every more
 specific failure is handled by its own typed exception first.
 
@@ -248,14 +252,18 @@ failure) maps to `ProviderUnavailableError` -> `provider_unavailable`; the
 SDK's own bounded transport retries are the only retry behavior. No second
 provider, no failover, no model selection logic.
 
-`bse_nlq.cli` (`bse-nlq ask "question"`, `[project.scripts]` entry point) is
-a thin wrapper: argument parsing, database-path resolution
-(`--db` / `$BSE_NLQ_DB` / `./bse_nlq.db`), and output rendering only. A
-missing `OPENAI_API_KEY` is checked before any database or provider access
-and fails closed with a clear message and no network attempt. Generated and
-executed SQL are shown as deliberate user-facing output (transparency), not
-logged as a diagnostic; API keys, full prompts, raw provider responses,
-questions, and raw SQL/rows are never logged by default.
+`bse_nlq.cli` (`bse-nlq ask [question] [--db PATH]`, `[project.scripts]`
+entry point) is a thin wrapper: argument parsing, database-path resolution
+(`--db` / `$BSE_NLQ_DB` / `./bse_nlq.db`), interactive example selection when
+the question is omitted, and output rendering only. `make dev` syncs
+dependencies, builds `./bse_nlq.db` if missing, loads `.env` when present,
+and launches that interactive path. A missing `OPENAI_API_KEY` is checked
+before any database or provider access and fails closed with a clear
+message and no network attempt (pointing keyless reviewers at
+`evaluation/run.py`). Generated and executed SQL are shown as deliberate
+user-facing output (transparency), not logged as a diagnostic; API keys,
+full prompts, raw provider responses, questions, and raw SQL/rows are never
+logged by default.
 
 ## Data and prompting
 
@@ -293,9 +301,18 @@ service and does not install an authorizer, progress handler, or executor.
 
 ## Interface and states
 
-The submitted interface is a CLI with an `ask` command, stdin support, strict `--as-of`, `--json`, and a secret-free `--show-prompt` diagnostic. A GUI and multi-turn interaction are out of scope.
+The submitted interface is a CLI: `bse-nlq ask "question"` for one-shot
+queries, or `bse-nlq ask` / `make dev` for an interactive menu of example
+questions plus a custom-question option. There is no `--as-of`, `--json`, or
+`--show-prompt` flag in the shipped surface (`as_of` is the fixed application
+default `2026-03-15`). A GUI and multi-turn conversational memory are out of
+scope.
 
-Terminal states distinguish successful answers, empty or truncated results, clarification, unsupported questions, invalid model output or SQL, policy rejection, execution limits or errors, provider failure, and internal failure. Every SQL-bearing result labels whether the SQL ran.
+Terminal states distinguish successful answers, empty results, clarification,
+unsupported questions, invalid model output or SQL, policy rejection,
+execution limits or errors, provider failure, and internal failure. Every
+SQL-bearing result labels whether the SQL ran. Row/column overflow is a hard
+rejection rather than a truncated result.
 
 ## Testing and evaluation
 
